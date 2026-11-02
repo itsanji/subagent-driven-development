@@ -1,0 +1,787 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body>
+<title>Subagent-Driven Development</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sticky main-agent panel above a task board, cursors on an overlay, and a timeline docked at the bottom. */
+:root {
+  --bg: #14171f;
+  --panel: #1c2130;
+  --raised: #252b3d;
+  --fg: #eceaf2;
+  --muted: #a4a8ba;
+  --line: #363d54;
+  --main: #ff5fa8;
+  --impl: #6fd3c7;
+  --spec: #f4b942;
+  --code: #b3a6ff;
+  --fix: #ff8f7d;
+  --final: #7fb8ff;
+  --pass: #8fdc9a;
+  --dock: #0d0f15;
+  --display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+  --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.55 var(--body); overflow-x: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+button { color: inherit; font: inherit; }
+:focus-visible { outline: 2px solid var(--spec); outline-offset: 3px; }
+
+.page {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 170px;
+  display: grid; gap: 20px;
+}
+.page > * { min-width: 0; }
+h1, h2 { margin: 0; font-family: var(--display); font-weight: 800; text-wrap: balance; }
+h1 { font-size: clamp(32px, 5.4vw, 52px); line-height: 1.05; letter-spacing: -.01em; }
+h2 { font-size: clamp(24px, 3.4vw, 32px); line-height: 1.15; }
+.intro { display: grid; gap: 10px; }
+.intro p { margin: 0; max-width: 66ch; color: var(--muted); font-size: 17px; }
+
+/* Sticky panel: the main agent's narration and context meters */
+#now {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 340px); gap: 12px 24px; align-items: center;
+  padding: 12px 16px; background: var(--panel); border: 1px solid var(--line);
+}
+.who { display: flex; align-items: center; gap: 8px; font: 500 12px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--main); }
+#home { display: inline-block; width: 24px; height: 24px; flex: none; }
+#say { margin: 4px 0 0; min-height: 3.1em; font-size: 16px; font-weight: 500; line-height: 1.4; }
+.meters { display: grid; gap: 8px; font: 400 12px/1.3 var(--mono); }
+.meter { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; }
+.meter b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.meter i { grid-column: 1 / -1; display: block; height: 6px; background: var(--raised); }
+.meter i span { display: block; height: 100%; width: 0; transition: width .25s; }
+#mainFill { background: var(--main); }
+#soloFill { background: var(--fix); }
+
+/* Board */
+.caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; align-items: center; font-size: 14px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 400 12px/1.4 var(--mono); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 9px; height: 9px; background: var(--c); }
+.row { display: grid; grid-template-columns: minmax(150px, 1.15fr) repeat(3, minmax(0, 1fr)) minmax(70px, .5fr); gap: 6px; }
+.heads { font: 500 11px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding-inline: 8px; margin-top: 14px; }
+.wave { margin: 12px 0 4px; font: 400 12.5px/1.4 var(--mono); color: var(--muted); }
+.lane { margin-bottom: 6px; }
+.name, .cell { min-height: 50px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); display: flex; align-items: center; min-width: 0; }
+.name { font-weight: 600; font-size: 15px; background: none; border-color: transparent; padding-left: 0; }
+.cell { font: 400 12.5px/1.35 var(--mono); position: relative; overflow-wrap: anywhere; }
+.cell.empty { background: none; border-style: dashed; }
+.cell.fail { border-color: var(--fix); color: var(--fix); background: color-mix(in srgb, var(--fix) 12%, var(--panel)); }
+.cell.pass { color: var(--pass); }
+.cell.span { grid-column: span 3; }
+.ghost { opacity: .12; }
+@media (max-width: 760px) {
+  #now { grid-template-columns: minmax(0, 1fr); }
+  .heads { display: none; }
+  .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .name { grid-column: 1 / -1; min-height: 0; padding-block: 4px 0; }
+  .cell { display: grid; align-content: start; gap: 2px; }
+  .cell::before { content: attr(data-h); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .cell.span { grid-column: 1 / -1; }
+  .lane { margin-bottom: 14px; }
+}
+
+/* Overlay */
+#stage { position: absolute; top: 0; left: 0; width: 100%; overflow: hidden; pointer-events: none; z-index: 20; }
+.agent { position: absolute; top: 0; left: 0; width: 18px; height: 18px; will-change: transform; }
+.agent svg { display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .55)); }
+.agent b { position: absolute; left: 14px; top: 15px; padding: 0 5px; background: var(--c); color: var(--bg); font: 500 10.5px/1.5 var(--mono); white-space: nowrap; }
+.agent.flip b { left: auto; right: 14px; }
+.agent.main { width: 24px; height: 24px; }
+.agent.main b { left: 18px; top: 20px; }
+.agent.main.parked b { display: none; }
+.box { position: absolute; border: 1px solid var(--c); border-right-width: 2px; background: color-mix(in srgb, var(--c) 14%, transparent); }
+
+/* Timeline */
+#bar {
+  position: fixed; z-index: 30; left: 16px; right: 16px; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  margin-inline: auto; width: min(860px, calc(100% - 32px));
+  display: grid; gap: 8px; padding: 10px 12px;
+  background: var(--dock); border: 1px solid var(--line); border-radius: 10px;
+  font: 400 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+.transport, .chapters-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.chapters-row { flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; }
+#bar button { padding: 4px 10px; background: var(--raised); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; white-space: nowrap; }
+#bar button:hover { border-color: var(--spec); }
+#play { min-width: 74px; background: var(--spec) !important; border-color: var(--spec) !important; color: var(--dock); font-weight: 500; }
+#time { white-space: nowrap; color: var(--muted); }
+
+.scrub { position: relative; flex: 1 1 auto; min-width: 60px; height: 24px; }
+.rail { position: absolute; left: 7px; right: 7px; top: 10px; height: 4px; background: var(--line); }
+.rail i { display: block; height: 100%; width: 0; background: var(--spec); }
+#ticks { position: absolute; left: 7px; right: 7px; top: 0; bottom: 0; pointer-events: none; }
+#ticks i { position: absolute; top: 7px; width: 2px; height: 10px; margin-left: -1px; background: var(--muted); }
+#ticks i.fail { top: 3px; height: 18px; background: var(--fix); }
+#seek { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; background: none; appearance: none; -webkit-appearance: none; cursor: pointer; }
+#seek::-webkit-slider-runnable-track { background: transparent; height: 24px; }
+#seek::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 20px; margin-top: 2px; border-radius: 3px; background: var(--fg); border: 2px solid var(--dock); }
+#seek::-moz-range-track { background: transparent; }
+#seek::-moz-range-thumb { width: 10px; height: 16px; border-radius: 3px; background: var(--fg); border: 2px solid var(--dock); }
+
+#chapters { display: flex; flex-wrap: wrap; gap: 4px; }
+#chapters button { padding: 2px 8px; font-size: 12px; color: var(--muted); }
+#chapters button[aria-current="true"] { color: var(--dock); background: var(--fg); border-color: var(--fg); }
+#status { color: var(--muted); font-size: 12px; }
+.fails-key { display: inline-flex; align-items: center; gap: 5px; }
+.fails-key::before { content: ""; width: 2px; height: 12px; background: var(--fix); }
+@media (max-width: 560px) {
+  #bar { padding: 8px; }
+  .transport { flex-wrap: wrap; gap: 6px 10px; }
+  .scrub { order: -1; flex: 1 0 100%; }
+  #time { margin-right: auto; font-size: 12px; }
+  #chapters button { padding: 2px 6px; }
+  #status { display: none; }
+}
+
+/* Notes */
+.notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--line); }
+.notes > div { display: grid; align-content: start; gap: 14px; min-width: 0; }
+.notes dl { margin: 0; display: grid; gap: 12px; }
+.notes dt { font-weight: 600; }
+.notes dd { margin: 0; color: var(--muted); max-width: 52ch; }
+.foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; font-size: 14px; color: var(--muted); }
+.foot p { margin: 0; max-width: 62ch; }
+#again { padding: 8px 14px; background: none; border: 1px solid var(--line); cursor: pointer; }
+#again:hover { border-color: var(--spec); }
+@media (max-width: 760px) { .notes { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<div class="page">
+  <div class="intro">
+    <h1>Subagent-driven development</h1>
+    <p>One main agent holds the plan and hands each task to a new subagent. Other new subagents review the work. Watch one small feature go through the process, or drag the timeline to any step.</p>
+  </div>
+
+  <div id="now">
+    <div>
+      <div class="who"><span id="home"></span>Main agent</div>
+      <p id="say" aria-live="polite">The feature is finished and ready to merge. The main agent still has plenty of context left.</p>
+    </div>
+    <div class="meters">
+      <div class="meter"><span>Main agent context</span><b id="mainVal">38%</b><i><span id="mainFill" style="width:38%"></span></i></div>
+      <div class="meter"><span>One agent doing it all</span><b id="soloVal">Over limit</b><i><span id="soloFill" style="width:100%"></span></i></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="caption">
+      <span>Example feature: password reset</span>
+      <div class="legend" aria-label="Agent roles">
+        <span style="--c:var(--main)"><i></i>Main agent</span>
+        <span style="--c:var(--impl)"><i></i>Implementer</span>
+        <span style="--c:var(--spec)"><i></i>Spec reviewer</span>
+        <span style="--c:var(--code)"><i></i>Code reviewer</span>
+        <span style="--c:var(--fix)"><i></i>Fixer</span>
+        <span style="--c:var(--final)"><i></i>Final reviewer</span>
+      </div>
+    </div>
+    <div class="row heads" aria-hidden="true"><span>Task</span><span>Implement</span><span>Spec review</span><span>Code review</span><span>Result</span></div>
+    <div id="board"></div>
+  </div>
+
+  <div class="notes">
+    <div>
+      <h2>Why it works</h2>
+      <dl>
+        <div><dt>Each task starts clean</dt><dd>A subagent gets only its brief, so leftovers from earlier tasks can't confuse it.</dd></div>
+        <div><dt>The main agent stays light</dt><dd>It keeps the plan and short reports, which leaves room to coordinate a long feature.</dd></div>
+        <div><dt>Reviewers judge independently</dt><dd>A reviewer reads the code and the spec. It doesn't see the implementer's reasoning or inherit its confidence.</dd></div>
+        <div><dt>Separate tasks can run together</dt><dd>Tasks that share no files and need nothing from each other can run in parallel.</dd></div>
+      </dl>
+    </div>
+    <div>
+      <h2>What it costs</h2>
+      <dl>
+        <div><dt>More total tokens</dt><dd>Every new subagent has to read the code again, and each review is another run.</dd></div>
+        <div><dt>It needs a good plan</dt><dd>A vague brief gets a vague result. Each task has to make sense to someone seeing the project for the first time.</dd></div>
+        <div><dt>Parallel writers can collide</dt><dd>Two agents editing the same file create conflicts, so those tasks should run one after the other.</dd></div>
+        <div><dt>Small jobs don't need it</dt><dd>For a one-file fix, dispatching agents takes longer than making the change.</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="foot">
+    <p>The feature, file names and context figures are made up to show the idea. They aren't measurements, and the details vary between tools and teams.</p>
+    <button id="again" type="button">Watch it again</button>
+  </div>
+</div>
+
+<div id="stage" aria-hidden="true"></div>
+
+<div id="bar" role="group" aria-label="Timeline">
+  <div class="transport">
+    <button id="play" type="button">Pause</button>
+    <div class="scrub">
+      <div class="rail" aria-hidden="true"><i id="fill"></i></div>
+      <div id="ticks" aria-hidden="true"></div>
+      <input id="seek" type="range" min="0" max="1" step="0.05" value="0" aria-label="Timeline position">
+    </div>
+    <span id="time">0:00 / 0:00</span>
+    <button id="speed" type="button" aria-label="Playback speed">1x</button>
+    <button id="close" type="button" aria-label="Hide the timeline">×</button>
+  </div>
+  <div class="chapters-row">
+    <div id="chapters"></div>
+    <span id="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const ROLE = {
+    impl: { label: 'implement', color: '#6fd3c7', dur: 3 },
+    spec: { label: 'spec check', color: '#f4b942', dur: 1.9 },
+    code: { label: 'code review', color: '#b3a6ff', dur: 1.9 },
+    fix: { label: 'fix', color: '#ff8f7d', dur: 2.2 },
+    final: { label: 'final review', color: '#7fb8ff', dur: 3.6 }
+  };
+  const MAIN_COLOR = '#ff5fa8';
+  const FLY = 0.75;
+  const FADE = 0.3;
+
+  const TASKS = [
+    { name: 'Reset tokens table', impl: 'reset_tokens.sql +38', wave: 0, implDur: 2.8 },
+    { name: 'Reset API endpoint', impl: 'reset.py +84', wave: 1, implDur: 3.4,
+      specFail: 'Missing: token expiry', fixText: 'reset.py +96, expiry added' },
+    { name: 'Reset email template', impl: 'email.html +46', wave: 1, implDur: 2.4 },
+    { name: 'Reset password form', impl: 'ResetForm.tsx +97', wave: 1, implDur: 3.1,
+      codeFail: 'Duplicated validation', fixText: 'ResetForm.tsx +76, shared validator' },
+    { name: 'Connect form to API', impl: 'reset.e2e.ts +63', wave: 2, implDur: 3 }
+  ];
+  const WAVES = [
+    'Wave 1: runs first, because the other tasks need it',
+    'Wave 2: these don’t depend on each other, so they run together',
+    'Wave 3: joins the pieces, so it waits for wave 2',
+    'Last: one reviewer checks the whole change'
+  ];
+  const SAY = {
+    plan: 'The main agent reads the spec and writes a plan. It coordinates the work and leaves the coding to subagents.',
+    first: 'Task 1 goes first because the others need it. A new subagent gets only the brief for this one task.',
+    report: 'The implementer sends back a short report and is discarded. Only that summary enters the main agent’s context.',
+    spec: 'A different subagent checks the code against the spec. It never saw how the implementer got there.',
+    code: 'A third subagent reviews code quality. The task is done only after both reviews pass.',
+    parallel: 'Tasks 2, 3 and 4 don’t depend on each other, so three subagents work at the same time.',
+    specFail: 'The spec check found a missing token expiry. A new subagent fixes it, then a new reviewer checks again.',
+    codeFail: 'Code review found duplicated validation. The same loop runs: fix it, then review it again.',
+    joined: 'Task 5 connects the pieces, so it had to wait for wave 2 to finish.',
+    final: 'A final reviewer reads the whole change and runs the tests, catching problems that sit between tasks.',
+    done: 'The feature is finished and ready to merge. The main agent still has plenty of context left.'
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage'), board = $('board'), bar = $('bar'), sayEl = $('say'), statusEl = $('status');
+  const fill = $('fill'), playBtn = $('play'), speedBtn = $('speed'), closeBtn = $('close'), seekEl = $('seek');
+  const timeEl = $('time'), ticksEl = $('ticks'), chaptersEl = $('chapters'), now = $('now'), home = $('home');
+
+  const ease = (p) => p * p * (3 - 2 * p);
+  const clamp01 = (p) => Math.max(0, Math.min(1, p));
+  const lerp = (a, b, f) => a + (b - a) * f;
+
+  /* The board */
+  const cells = {}, names = [];
+
+  function makeCell(key, heading, cls = '') {
+    const cell = document.createElement('div');
+    cell.className = `cell empty ${cls}`;
+    cell.dataset.h = heading;
+    const txt = document.createElement('span');
+    cell.append(txt);
+    cell.txt = txt;
+    cell.cur = null;
+    cells[key] = cell;
+    return cell;
+  }
+
+  function buildBoard() {
+    let wave = -1;
+    const addWave = (i) => {
+      const w = document.createElement('div');
+      w.className = 'wave';
+      w.textContent = WAVES[i];
+      board.append(w);
+    };
+    TASKS.forEach((task, i) => {
+      if (task.wave !== wave) { wave = task.wave; addWave(wave); }
+      const lane = document.createElement('div');
+      lane.className = 'row lane';
+      const name = document.createElement('div');
+      name.className = 'name';
+      const label = document.createElement('span');
+      label.textContent = `${i + 1}. ${task.name}`;
+      name.append(label);
+      names.push(label);
+      lane.append(
+        name,
+        makeCell(`${i}.impl`, 'Implement'),
+        makeCell(`${i}.spec`, 'Spec review'),
+        makeCell(`${i}.code`, 'Code review'),
+        makeCell(`${i}.result`, 'Result')
+      );
+      board.append(lane);
+    });
+    addWave(3);
+    const lane = document.createElement('div');
+    lane.className = 'row lane';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.innerHTML = '<span>Whole change</span>';
+    lane.append(name, makeCell('final.review', 'Final review', 'span'), makeCell('final.result', 'Result'));
+    board.append(lane);
+  }
+
+  /* The timeline: every event is worked out in advance, so any moment can be drawn directly. */
+  const TL = { jobs: [], writes: [], says: [], bumps: [], entries: {}, chapters: [], fails: [], tasks: [], mainSegs: [], dur: 0 };
+
+  function buildTimeline() {
+    const say = (key, t) => TL.says.push({ key, t });
+    const entry = (key, e) => { (TL.entries[key] = TL.entries[key] || []).push(e); };
+    const job = (role, key, text, state, start, { dur, ctx = [1.6, 5] } = {}) => {
+      const d = dur || ROLE[role].dur;
+      const arrive = start + FLY, workEnd = arrive + d, back = workEnd + FLY;
+      TL.jobs.push({ role, key, start, arrive, workEnd, back });
+      entry(key, { t: arrive, end: workEnd, text, state });
+      TL.bumps.push({ t: back, main: ctx[0], solo: ctx[1] });
+      return back;
+    };
+    const runTask = (i, start, teach) => {
+      const task = TASKS[i];
+      let c = job('impl', `${i}.impl`, task.impl, '', start, { dur: task.implDur, ctx: [1.6, 11] });
+      if (teach) { say('report', c); c += 2.2; say('spec', c); }
+      if (task.specFail) {
+        c = job('spec', `${i}.spec`, task.specFail, 'fail', c);
+        TL.fails.push({ t: c - FLY, label: task.specFail });
+        say('specFail', c);
+        c = job('fix', `${i}.impl`, task.fixText, '', c, { ctx: [1.6, 6] });
+      }
+      c = job('spec', `${i}.spec`, 'Matches spec', 'pass', c);
+      if (teach) say('code', c);
+      if (task.codeFail) {
+        c = job('code', `${i}.code`, task.codeFail, 'fail', c);
+        TL.fails.push({ t: c - FLY, label: task.codeFail });
+        say('codeFail', c);
+        c = job('fix', `${i}.impl`, task.fixText, '', c, { ctx: [1.6, 6] });
+      }
+      c = job('code', `${i}.code`, 'Approved', 'pass', c);
+      entry(`${i}.result`, { t: c, end: c, text: 'Done', state: 'pass' });
+      TL.tasks.push(c);
+      return c;
+    };
+
+    const labelLeft = (i) => () => {
+      const r = names[i].getBoundingClientRect();
+      return { x: r.left + scrollX, y: r.top + scrollY + r.height * 0.55 };
+    };
+    const labelRight = (i) => () => {
+      const r = names[i].getBoundingClientRect();
+      return { x: r.right + scrollX, y: r.top + scrollY + r.height * 0.55 };
+    };
+
+    TL.chapters.push({ label: 'Plan', t: 0 });
+    say('plan', 0);
+    let c = 1.4;
+    TL.bumps.push({ t: c, main: 6, solo: 6 });
+    let from = homePoint;
+    names.forEach((_, i) => {
+      const writeStart = c + 0.42, writeEnd = writeStart + 0.34;
+      TL.mainSegs.push({ t0: c, t1: writeStart, from, to: labelLeft(i), ease: true });
+      TL.mainSegs.push({ t0: writeStart, t1: writeEnd, from: labelLeft(i), to: labelRight(i), ease: false });
+      TL.writes.push({ i, t0: writeStart, t1: writeEnd });
+      from = labelRight(i);
+      c = writeEnd;
+    });
+    TL.mainSegs.push({ t0: c, t1: c + 0.8, from, to: homePoint, ease: true });
+    c += 1.1;
+
+    TL.chapters.push({ label: 'Wave 1', t: c });
+    say('first', c);
+    c = runTask(0, c, true) + 0.8;
+
+    TL.chapters.push({ label: 'Wave 2', t: c });
+    say('parallel', c);
+    c = Math.max(...[1, 2, 3].map((i, n) => runTask(i, c + n * 0.5, false))) + 0.8;
+
+    TL.chapters.push({ label: 'Wave 3', t: c });
+    say('joined', c);
+    c = runTask(4, c, false) + 0.6;
+
+    TL.chapters.push({ label: 'Final', t: c });
+    say('final', c);
+    c = job('final', 'final.review', 'Full diff read, 42 tests pass', 'pass', c, { ctx: [1.6, 6] });
+    entry('final.result', { t: c, end: c, text: 'Ready to merge', state: 'pass' });
+    // Whole steps of the slider, so dragging it all the way lands exactly on the end.
+    TL.dur = Math.ceil((c + 0.4) * 20) / 20;
+    say('done', TL.dur);
+    TL.says.sort((a, b) => a.t - b.t);
+  }
+
+  /* Cursors and selection boxes */
+  function homePoint() {
+    const r = home.getBoundingClientRect();
+    return { x: r.left + scrollX, y: r.top + scrollY };
+  }
+
+  function makeAgent(color, labelText, cls = '') {
+    const el = document.createElement('div');
+    el.className = `agent ${cls}`;
+    el.style.setProperty('--c', color);
+    const size = cls === 'main' ? 24 : 18;
+    el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 18 18"><path d="M2 1l13 6.2-5.6 1.7L7.2 15z" fill="${color}" stroke="#0d0f15" stroke-width="1"/></svg><b>${labelText}</b>`;
+    el.hidden = true;
+    stage.append(el);
+    return el;
+  }
+
+  function makeBox(color) {
+    const box = document.createElement('div');
+    box.className = 'box';
+    box.style.setProperty('--c', color);
+    box.hidden = true;
+    stage.append(box);
+    return box;
+  }
+
+  function buildSprites() {
+    TL.jobs.forEach((job) => {
+      job.el = makeAgent(ROLE[job.role].color, ROLE[job.role].label);
+      job.labelEl = job.el.querySelector('b');
+      job.box = makeBox(ROLE[job.role].color);
+    });
+    TL.writes.forEach((w) => { w.box = makeBox(MAIN_COLOR); });
+    mainEl = makeAgent(MAIN_COLOR, 'main', 'main');
+    mainEl.hidden = false;
+  }
+
+  function place(el, x, y) {
+    el.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`;
+    const flip = x > stage.clientWidth - 110;
+    if (flip !== el.flipped) { el.flipped = flip; el.classList.toggle('flip', flip); }
+  }
+
+  function setClip(el, p) {
+    const v = p >= 1 ? '' : `inset(0 ${((1 - p) * 100).toFixed(1)}% 0 0)`;
+    if (el.clipValue !== v) { el.clipValue = v; el.style.clipPath = v; }
+  }
+
+  function drawBox(box, rect, width, opacity) {
+    box.hidden = false;
+    box.style.left = `${rect.x}px`;
+    box.style.top = `${rect.y}px`;
+    box.style.width = `${width}px`;
+    box.style.height = `${rect.h}px`;
+    box.style.opacity = opacity;
+  }
+
+  function pageRect(el) {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
+  }
+
+  function syncStage() {
+    stage.style.height = `${document.documentElement.scrollHeight}px`;
+  }
+
+  /* Playback state */
+  let mainEl = null, T = 0, playing = false, scrubbing = false, speed = 1, dirty = true;
+  let raf = 0, last = 0, sayKey = '', mainCtx = -1, soloCtx = -1, shownSecond = -1, shownChapter = -1;
+  let autoScroll = true, scrollGoal = null, scrollPos = 0, focusedAt = 0;
+
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  function focusOn(el) {
+    const clock = performance.now();
+    if (clock - focusedAt < 2500) return;
+    const r = el.getBoundingClientRect();
+    const top = now.getBoundingClientRect().bottom + 12;
+    if (r.top < top || r.bottom > bar.getBoundingClientRect().top - 12) {
+      focusedAt = clock;
+      const max = document.documentElement.scrollHeight - innerHeight;
+      scrollGoal = Math.max(0, Math.min(max, r.top + scrollY - now.offsetHeight - 50));
+      scrollPos = scrollY;
+    }
+  }
+
+  function renderNarration() {
+    let current = TL.says[0];
+    for (const s of TL.says) if (s.t <= T) current = s;
+    if (current.key !== sayKey) {
+      sayKey = current.key;
+      sayEl.textContent = SAY[sayKey];
+    }
+  }
+
+  function renderMeters() {
+    let m = 0, s = 0;
+    for (const b of TL.bumps) if (b.t <= T) { m += b.main; s += b.solo; }
+    if (m === mainCtx && s === soloCtx) return;
+    mainCtx = m; soloCtx = s;
+    $('mainVal').textContent = `${Math.round(m)}%`;
+    $('mainFill').style.width = `${Math.min(100, m)}%`;
+    $('soloVal').textContent = s >= 100 ? 'Over limit' : `${Math.round(s)}%`;
+    $('soloFill').style.width = `${Math.min(100, s)}%`;
+  }
+
+  function renderCells() {
+    let changed = false;
+    for (const key of Object.keys(cells)) {
+      const cell = cells[key];
+      let cur = null;
+      for (const e of TL.entries[key] || []) if (e.t <= T) cur = e;
+      if (cur !== cell.cur) {
+        cell.cur = cur;
+        cell.classList.remove('empty', 'fail', 'pass');
+        cell.classList.add(cur ? (cur.state || 'written') : 'empty');
+        cell.txt.textContent = cur ? cur.text : '';
+        changed = true;
+      }
+      const p = cur && cur.end > cur.t ? ease(clamp01((T - cur.t) / (cur.end - cur.t))) : 1;
+      setClip(cell.txt, p);
+    }
+    if (changed) syncStage();
+  }
+
+  function renderWrites() {
+    for (const w of TL.writes) {
+      const label = names[w.i];
+      const started = T >= w.t0;
+      const ghost = !started;
+      if (label.isGhost !== ghost) { label.isGhost = ghost; label.classList.toggle('ghost', ghost); }
+      setClip(label, started ? clamp01((T - w.t0) / (w.t1 - w.t0)) : 1);
+      if (started && T < w.t1 + FADE) {
+        const rect = pageRect(label);
+        const p = clamp01((T - w.t0) / (w.t1 - w.t0));
+        drawBox(w.box, rect, rect.w * p, T > w.t1 ? 1 - (T - w.t1) / FADE : 1);
+      } else {
+        w.box.hidden = true;
+      }
+    }
+  }
+
+  function renderMain() {
+    let pos = homePoint(), away = false;
+    for (const seg of TL.mainSegs) {
+      if (T >= seg.t0 && T < seg.t1) {
+        const raw = (T - seg.t0) / (seg.t1 - seg.t0);
+        const f = seg.ease ? ease(raw) : raw;
+        const a = seg.from(), b = seg.to();
+        pos = { x: lerp(a.x, b.x, f), y: lerp(a.y, b.y, f) };
+        away = true;
+        break;
+      }
+    }
+    mainEl.classList.toggle('parked', !away);
+    place(mainEl, pos.x, pos.y);
+  }
+
+  function renderJobs() {
+    let working = 0, dispatched = 0, newest = null;
+    const homeP = homePoint();
+    for (const job of TL.jobs) {
+      if (T >= job.start) dispatched++;
+      const active = T >= job.start && T < job.back;
+      if (active) {
+        working++;
+        if (!newest || job.start > newest.start) newest = job;
+      }
+      const visible = T >= job.start && T < job.back + FADE;
+      if (!visible) {
+        job.el.hidden = true;
+        job.box.hidden = true;
+        continue;
+      }
+      job.el.hidden = false;
+      const rect = pageRect(cells[job.key]);
+      const workP = ease(clamp01((T - job.arrive) / (job.workEnd - job.arrive)));
+      const startPt = { x: rect.x, y: rect.y + rect.h * 0.55 };
+      const endPt = { x: rect.x + rect.w, y: startPt.y };
+      let x, y;
+      if (T < job.arrive) {
+        const f = ease((T - job.start) / FLY);
+        x = lerp(homeP.x, startPt.x, f);
+        y = lerp(homeP.y, startPt.y, f);
+      } else if (T < job.workEnd) {
+        x = lerp(startPt.x, endPt.x, workP);
+        y = startPt.y;
+      } else {
+        const f = ease(clamp01((T - job.workEnd) / FLY));
+        x = lerp(endPt.x, homeP.x, f);
+        y = lerp(endPt.y, homeP.y, f);
+      }
+      place(job.el, x, y);
+      job.el.style.opacity = T > job.back ? 1 - (T - job.back) / FADE : 1;
+      const text = T >= job.workEnd ? 'report' : ROLE[job.role].label;
+      if (job.labelEl.textContent !== text) job.labelEl.textContent = text;
+      if (T >= job.arrive && T < job.workEnd + FADE) {
+        drawBox(job.box, rect, rect.w * workP, T > job.workEnd ? 1 - (T - job.workEnd) / FADE : 1);
+      } else {
+        job.box.hidden = true;
+      }
+    }
+    if (newest && autoScroll && (playing || scrubbing)) focusOn(cells[newest.key]);
+    return { working, dispatched };
+  }
+
+  function renderBar(counts) {
+    const f = T / TL.dur;
+    fill.style.width = `${f * 100}%`;
+    if (!scrubbing) seekEl.value = T;
+    const second = Math.floor(T);
+    if (second !== shownSecond) {
+      shownSecond = second;
+      timeEl.textContent = `${fmt(T)} / ${fmt(TL.dur)}`;
+      seekEl.setAttribute('aria-valuetext', `${fmt(T)} of ${fmt(TL.dur)}`);
+    }
+    let chapter = 0;
+    TL.chapters.forEach((c, i) => { if (c.t <= T) chapter = i; });
+    if (chapter !== shownChapter) {
+      shownChapter = chapter;
+      [...chaptersEl.children].forEach((b, i) => b.setAttribute('aria-current', String(i === chapter)));
+    }
+    const tasksDone = TL.tasks.filter((t) => t <= T).length;
+    statusEl.textContent = T >= TL.dur
+      ? `All ${TASKS.length} tasks finished by ${TL.jobs.length} subagents`
+      : `${counts.working} working | ${counts.dispatched} dispatched | ${tasksDone} / ${TASKS.length} tasks`;
+    playBtn.textContent = T >= TL.dur ? 'Replay' : playing ? 'Pause' : 'Play';
+  }
+
+  function render() {
+    renderNarration();
+    renderMeters();
+    renderCells();
+    renderWrites();
+    renderMain();
+    renderBar(renderJobs());
+  }
+
+  function frame(stamp) {
+    const realDt = Math.min(0.1, (stamp - last) / 1000);
+    last = stamp;
+    if (playing && !scrubbing) {
+      T = Math.min(TL.dur, T + realDt * speed);
+      if (T >= TL.dur) playing = false;
+      dirty = true;
+    }
+    if (scrollGoal !== null) {
+      if (autoScroll && (playing || scrubbing)) {
+        scrollPos += (scrollGoal - scrollPos) * (1 - Math.exp(-3 * realDt));
+        scrollTo(0, scrollPos);
+        if (Math.abs(scrollGoal - scrollPos) < 1) scrollGoal = null;
+      } else {
+        scrollGoal = null;
+      }
+    }
+    if (dirty) {
+      dirty = false;
+      render();
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  function seek(value) {
+    T = Math.max(0, Math.min(TL.dur, value));
+    dirty = true;
+  }
+
+  function playFromStart() {
+    autoScroll = true;
+    scrollGoal = null;
+    focusedAt = 0;
+    scrollTo(0, 0);
+    bar.hidden = false;
+    seek(0);
+    playing = true;
+  }
+
+  function buildControls() {
+    seekEl.max = TL.dur;
+    TL.chapters.forEach((c) => {
+      const tick = document.createElement('i');
+      tick.style.left = `${(c.t / TL.dur) * 100}%`;
+      if (c.t > 0) ticksEl.append(tick);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = c.label;
+      b.addEventListener('click', () => { autoScroll = true; focusedAt = 0; seek(c.t); });
+      chaptersEl.append(b);
+    });
+    TL.fails.forEach((f) => {
+      const tick = document.createElement('i');
+      tick.className = 'fail';
+      tick.style.left = `${(f.t / TL.dur) * 100}%`;
+      tick.title = `Review failed: ${f.label}`;
+      ticksEl.append(tick);
+    });
+
+    seekEl.addEventListener('pointerdown', () => { scrubbing = true; autoScroll = true; focusedAt = 0; });
+    addEventListener('pointerup', () => { scrubbing = false; });
+    addEventListener('pointercancel', () => { scrubbing = false; });
+    seekEl.addEventListener('input', () => {
+      const value = +seekEl.value;
+      seek(value >= TL.dur - 0.06 ? TL.dur : value);
+    });
+
+    playBtn.addEventListener('click', () => {
+      if (T >= TL.dur) { playFromStart(); return; }
+      playing = !playing;
+      dirty = true;
+    });
+    speedBtn.addEventListener('click', () => {
+      speed = speed === 4 ? 1 : speed * 2;
+      speedBtn.textContent = `${speed}x`;
+    });
+    closeBtn.addEventListener('click', () => {
+      playing = false;
+      seek(TL.dur);
+      bar.hidden = true;
+    });
+    $('again').addEventListener('click', playFromStart);
+
+    addEventListener('keydown', (e) => {
+      if (bar.hidden || (e.target.closest && e.target.closest('button, input, a'))) return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        playBtn.click();
+      } else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        e.preventDefault();
+        seek(T + (e.code === 'ArrowLeft' ? -2 : 2));
+      }
+    });
+  }
+
+  // Scrolling by hand takes over, so the page never fights the viewer.
+  const handScroll = (e) => { if (!e.target.closest || !e.target.closest('#bar')) autoScroll = false; };
+  addEventListener('wheel', handScroll, { passive: true });
+  addEventListener('touchmove', handScroll, { passive: true });
+  addEventListener('scroll', () => { dirty = true; }, { passive: true });
+  addEventListener('resize', () => { syncStage(); dirty = true; });
+
+  buildBoard();
+  buildTimeline();
+  buildSprites();
+  buildControls();
+  syncStage();
+  T = TL.dur;
+  render();
+  last = performance.now();
+  raf = requestAnimationFrame(frame);
+
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // A page opened in a background tab waits, so the viewer still sees it from the start.
+    if (document.visibilityState === 'visible') playFromStart();
+    else document.addEventListener('visibilitychange', playFromStart, { once: true });
+  }
+})();
+</script>
+
+</body></html>
