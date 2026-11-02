@@ -1,0 +1,476 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body>
+<title>Agent Swarm Rebuild</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column of hairline-framed sections, with a swarm overlay and a floating build bar on top. */
+:root {
+  --bg: #0f2a33;
+  --panel: #153640;
+  --fg: #f0e7d6;
+  --muted: #a3bab7;
+  --line: #2f5660;
+  --accent: #f4b942;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body); overflow-x: hidden; }
+button, a { color: inherit; font: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.page {
+  max-width: 1040px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 112px;
+  display: grid; gap: 72px;
+}
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; padding-block: 20px; border-bottom: 1px solid var(--line); }
+.logo { font: 800 26px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; }
+nav { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 15px; }
+nav a { text-decoration: none; display: inline-block; }
+nav a:hover { color: var(--accent); }
+
+.hero { display: grid; gap: 28px; margin-top: -24px; }
+.eyebrow { margin: 0; font: 500 12px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1, h2 { margin: 0; font-family: var(--display); font-weight: 800; text-transform: uppercase; text-wrap: balance; }
+h1 { font-size: clamp(56px, 13vw, 132px); line-height: .92; }
+h1 span { display: block; width: fit-content; }
+h1 span:last-child { color: var(--accent); }
+h2 { font-size: clamp(36px, 7vw, 60px); line-height: 1; }
+.lede { margin: 0; max-width: 56ch; font-size: 18px; color: var(--muted); }
+.cta { justify-self: start; display: inline-block; padding: 12px 20px; background: var(--accent); color: var(--bg); font-weight: 600; text-decoration: none; }
+
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding-top: 20px; border-top: 1px solid var(--line); }
+.stats div { display: grid; gap: 2px; min-width: 0; }
+.stats dd { margin: 0; font: 800 clamp(30px, 6vw, 46px)/1 var(--display); width: fit-content; }
+.stats dt { font-size: 14px; color: var(--muted); width: fit-content; }
+
+section { display: grid; gap: 24px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.card { display: grid; align-content: start; gap: 10px; padding: 12px; border: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.card canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1.5; }
+.card h3 { margin: 0; font-size: 18px; font-weight: 600; width: fit-content; }
+.card p { margin: 0; font: 400 13px/1.4 var(--mono); color: var(--muted); width: fit-content; }
+
+ol.steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.steps li { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 8px 24px; padding-block: 16px; border-bottom: 1px solid var(--line); }
+.steps strong { font-weight: 600; width: fit-content; }
+.steps span { color: var(--muted); width: fit-content; }
+@media (max-width: 560px) { .steps li { grid-template-columns: minmax(0, 1fr); } }
+
+.contact { display: grid; gap: 16px; padding: 28px; border: 1px solid var(--line); background: var(--panel); }
+.contact p { margin: 0; width: fit-content; max-width: 100%; overflow-wrap: anywhere; }
+.contact .addr { font: 500 16px/1.4 var(--mono); color: var(--accent); user-select: all; }
+footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; font-size: 14px; color: var(--muted); }
+footer p { margin: 0; max-width: 60ch; }
+.ghost { padding: 8px 14px; background: none; border: 1px solid var(--line); cursor: pointer; }
+.ghost:hover { border-color: var(--accent); }
+
+/* Layer states: a layer waits as a faint ghost, then the agent working on it wipes it in. */
+[data-l].pending { opacity: .1; }
+[data-l].building { opacity: 1; }
+
+#stage { position: absolute; top: 0; left: 0; width: 100%; overflow: hidden; pointer-events: none; z-index: 20; }
+.agent { position: absolute; top: 0; left: 0; width: 18px; height: 18px; will-change: transform; }
+.agent svg { display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5)); }
+.box { position: absolute; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
+.box.text { border-width: 0 2px 0 0; background: none; }
+.box b { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 5px); padding: 1px 5px; background: var(--c); color: var(--bg); font: 500 10px/1.5 var(--mono); white-space: nowrap; }
+
+#bar {
+  position: fixed; z-index: 30; left: 16px; right: 16px; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  margin-inline: auto; width: fit-content; max-width: calc(100% - 32px);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; padding: 8px 12px;
+  background: #0a1d24; border: 1px solid var(--line); border-radius: 10px;
+  font: 400 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+}
+#dots { display: flex; }
+#dots i { width: 14px; height: 14px; border-radius: 50%; margin-left: -4px; border: 2px solid #0a1d24; }
+#status { white-space: nowrap; }
+.track { width: 90px; height: 3px; background: var(--line); }
+.track i { display: block; height: 100%; width: 0; background: var(--accent); }
+#bar button { padding: 4px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+#bar button:hover { border-color: var(--accent); }
+#bar button[aria-pressed="true"], #golive { background: var(--accent) !important; border-color: var(--accent) !important; color: var(--bg); }
+@media (max-width: 480px) { #dots, .track { display: none; } }
+</style>
+
+<div class="page">
+  <header>
+    <div class="logo" data-l="t">Low Tide</div>
+    <nav aria-label="Main">
+      <a href="#recordings" data-l="t">Recordings</a>
+      <a href="#sessions" data-l="t">Sessions</a>
+      <a href="#contact" data-l="t">Contact</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <p class="eyebrow" data-l="t" style="width:fit-content">Field recording studio</p>
+    <h1><span data-l="t">Record the</span> <span data-l="t">coast before</span> <span data-l="t">it changes.</span></h1>
+    <p class="lede" data-l="t">Low Tide is a two-person studio that records shorelines, harbours and estuaries for film, games and radio.</p>
+    <a class="cta" href="#recordings" data-l="b">Hear the archive</a>
+    <dl class="stats">
+      <div><dd data-l="t">412 h</dd><dt data-l="t">of archived sound</dt></div>
+      <div><dd data-l="t">96 kHz</dd><dt data-l="t">24-bit capture</dt></div>
+      <div><dd data-l="t">31</dd><dt data-l="t">shorelines mapped</dt></div>
+    </dl>
+  </div>
+
+  <section id="recordings">
+    <h2 data-l="t" style="width:fit-content">Recordings</h2>
+    <div class="cards">
+      <article class="card">
+        <canvas width="600" height="300" data-l="b" data-seed="7" data-color="#6fd3c7" aria-hidden="true"></canvas>
+        <h3 data-l="t">Slack water, harbour wall</h3>
+        <p data-l="t">14:32 · 96 kHz · stereo</p>
+      </article>
+      <article class="card">
+        <canvas width="600" height="300" data-l="b" data-seed="23" data-color="#f4b942" aria-hidden="true"></canvas>
+        <h3 data-l="t">Shingle drag, falling tide</h3>
+        <p data-l="t">22:05 · 96 kHz · mid-side</p>
+      </article>
+      <article class="card">
+        <canvas width="600" height="300" data-l="b" data-seed="41" data-color="#ff8f7d" aria-hidden="true"></canvas>
+        <h3 data-l="t">Reed bed at dusk, estuary</h3>
+        <p data-l="t">31:48 · 48 kHz · ambisonic</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="sessions">
+    <h2 data-l="t" style="width:fit-content">How a session runs</h2>
+    <ol class="steps">
+      <li><strong data-l="t">1. Read the tide table</strong><span data-l="t">We pick a two-hour window around the state of tide you need.</span></li>
+      <li><strong data-l="t">2. Set the rig</strong><span data-l="t">Two microphone pairs go out, one near the waterline and one back from it.</span></li>
+      <li><strong data-l="t">3. Wait out the wind</strong><span data-l="t">We log gusts and boats, then keep rolling until the air settles.</span></li>
+      <li><strong data-l="t">4. Cut and master</strong><span data-l="t">You get edited stems and untouched takes within ten days.</span></li>
+    </ol>
+  </section>
+
+  <section id="contact" class="contact">
+    <h2 data-l="t" style="width:fit-content">Bring us your shoreline.</h2>
+    <p data-l="t">Tell us the place, the tide and what the sound is for.</p>
+    <p class="addr" data-l="t">hello@lowtide.example</p>
+  </section>
+
+  <footer>
+    <p>Low Tide is a made-up studio for this demo. The agents are an animation, and nothing is generated live.</p>
+    <button class="ghost" id="again" type="button">Replay the build</button>
+  </footer>
+</div>
+
+<div id="stage" aria-hidden="true"></div>
+
+<div id="bar" role="group" aria-label="Build progress" hidden>
+  <div id="dots" aria-hidden="true"></div>
+  <span id="status">Scanning page…</span>
+  <div class="track" aria-hidden="true"><i id="fill"></i></div>
+  <button id="tour" type="button" aria-pressed="true">Touring</button>
+  <button id="speed" type="button" aria-label="Playback speed">1x</button>
+  <button id="golive" type="button" hidden>Go live</button>
+  <button id="replay" type="button" hidden>Replay</button>
+  <button id="close" type="button" aria-label="Skip to the finished page">×</button>
+</div>
+
+<script>
+(() => {
+  const SCAN = 2.2;        // seconds of swarming before the first layer
+  const BUILD = 24;        // seconds over which layers are handed out at 1x
+  const FIRST_AGENTS = 8;
+  const MAX_AGENTS = 24;
+  const FLY = 0.45;
+  const COLORS = ['#ff8f7d', '#6fd3c7', '#f4b942', '#a899ff', '#7fb8ff', '#ff9ed2', '#b7e26a'];
+
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage'), bar = $('bar'), statusEl = $('status'), fill = $('fill'), dots = $('dots');
+  const tourBtn = $('tour'), speedBtn = $('speed'), goBtn = $('golive'), replayBtn = $('replay'), closeBtn = $('close');
+  const all = [...document.querySelectorAll('[data-l]')];
+
+  let layers = [], agents = [];
+  let phase = 'idle', raf = 0, last = 0;
+  let t = 0, wall = 0, speed = 1, touring = true;
+  let nextIndex = 0, nextStart = 0, done = 0, workY = 0, scrollPos = 0;
+  let pointer = null;
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const ease = (p) => p * p * (3 - 2 * p);
+
+  function drawWaves() {
+    document.querySelectorAll('canvas[data-seed]').forEach((c) => {
+      const g = c.getContext('2d');
+      let s = +c.dataset.seed;
+      const next = () => (s = (s * 16807) % 2147483647) / 2147483647;
+      g.fillStyle = c.dataset.color;
+      for (let x = 0; x < c.width; x += 6) {
+        const swell = 0.35 + 0.65 * Math.abs(Math.sin(x / 70 + s % 5));
+        const h = 12 + next() * swell * (c.height - 30);
+        g.fillRect(x, (c.height - h) / 2, 3, h);
+      }
+    });
+  }
+
+  function rectOf(el) {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
+  }
+
+  function spawnAgent() {
+    const el = document.createElement('div');
+    const color = COLORS[agents.length % COLORS.length];
+    el.className = 'agent';
+    el.innerHTML = `<svg width="18" height="18" viewBox="0 0 18 18"><path d="M2 1l13 6.2-5.6 1.7L7.2 15z" fill="${color}" stroke="#0a1d24" stroke-width="1"/></svg>`;
+    stage.append(el);
+    agents.push({
+      el, color, i: agents.length, task: null, retarget: 0,
+      x: rand(0, innerWidth), y: scrollY + innerHeight + 30, tx: 0, ty: 0
+    });
+  }
+
+  function startTask(agent, layer) {
+    const rect = rectOf(layer);
+    const kind = layer.dataset.l;
+    const drag = 0.4 + Math.min(0.6, rect.w * rect.h / 90000);
+    const box = document.createElement('div');
+    box.className = kind === 't' ? 'box text' : 'box';
+    box.style.setProperty('--c', agent.color);
+    box.style.cssText += `left:${rect.x}px;top:${rect.y}px;width:0;height:${kind === 't' ? rect.h : 0}px;visibility:hidden`;
+    if (kind === 'b') box.innerHTML = '<b></b>';
+    stage.append(box);
+    agent.task = { layer, rect, kind, drag, box, t0: t };
+    workY = rect.y;
+  }
+
+  function assignLayers() {
+    while (nextIndex < layers.length && t >= nextStart) {
+      const layer = layers[nextIndex];
+      const r = layer.getBoundingClientRect();
+      let best = null, bestDist = Infinity;
+      for (const a of agents) {
+        if (a.task) continue;
+        const d = Math.hypot(a.x - r.left, a.y - (r.top + scrollY));
+        if (d < bestDist) { bestDist = d; best = a; }
+      }
+      if (!best) return;
+      startTask(best, layer);
+      nextIndex++;
+      nextStart += BUILD / layers.length;
+    }
+  }
+
+  function setClip(layer, kind, p) {
+    const open = ((1 - p) * 100).toFixed(1);
+    layer.style.clipPath = `inset(0 ${open}% ${kind === 'b' ? open : 0}% 0)`;
+  }
+
+  function finishTask(agent) {
+    const { layer, box } = agent.task;
+    layer.classList.remove('pending', 'building');
+    layer.style.clipPath = '';
+    box.animate({ opacity: [1, 0] }, { duration: 300 }).onfinish = () => box.remove();
+    agent.task = null;
+    agent.retarget = 0;
+    done++;
+  }
+
+  function moveAgent(a, dt) {
+    let k = 3;
+    if (a.task) {
+      const { rect, kind, drag, box, layer } = a.task;
+      const age = t - a.task.t0;
+      if (age < FLY) {
+        a.tx = rect.x; a.ty = rect.y; k = 9;
+      } else {
+        const p = ease(Math.min(1, (age - FLY) / drag));
+        if (!layer.classList.contains('building')) {
+          layer.classList.add('building');
+          box.style.visibility = 'visible';
+        }
+        const w = rect.w * p, h = kind === 't' ? rect.h : rect.h * p;
+        box.style.width = `${w}px`;
+        box.style.height = `${h}px`;
+        if (kind === 'b') box.firstChild.textContent = `${Math.round(w)} × ${Math.round(h)}`;
+        setClip(layer, kind, p);
+        a.x = a.tx = rect.x + w;
+        a.y = a.ty = rect.y + h;
+        if (p >= 1) finishTask(a);
+      }
+    } else if (phase === 'build') {
+      if (t >= a.retarget) {
+        a.retarget = t + rand(0.6, 1.6);
+        a.tx = rand(16, stage.clientWidth - 24);
+        a.ty = workY + rand(-0.35, 0.6) * innerHeight;
+      }
+    } else {
+      const angle = t * 1.2 + a.i * 2.4;
+      if (phase === 'flock' && pointer) {
+        // Each agent has its own orbit and lag, so the swarm trails the real mouse.
+        const r = 14 + (a.i % 5) * 11;
+        a.tx = pointer.x + scrollX + Math.cos(angle) * r;
+        a.ty = pointer.y + scrollY + Math.sin(angle) * r;
+        k = 2.5 + (a.i % 6) * 1.3;
+      } else {
+        const big = phase === 'flock' ? 90 : 40;
+        const r = big + (a.i % 5) * (phase === 'flock' ? 22 : 14);
+        a.tx = stage.clientWidth / 2 + Math.cos(angle) * r * 1.5;
+        a.ty = scrollY + innerHeight * 0.42 + Math.sin(angle) * r;
+        k = 4;
+      }
+    }
+    a.x += (a.tx - a.x) * (1 - Math.exp(-k * dt));
+    a.y += (a.ty - a.y) * (1 - Math.exp(-k * dt));
+    a.el.style.transform = `translate3d(${a.x.toFixed(1)}px,${a.y.toFixed(1)}px,0)`;
+  }
+
+  function tour(realDt) {
+    if (!touring) return;
+    const max = document.documentElement.scrollHeight - innerHeight;
+    const target = Math.max(0, Math.min(max, workY - innerHeight * 0.3));
+    scrollPos += (target - scrollPos) * (1 - Math.exp(-1.8 * realDt * Math.sqrt(speed)));
+    scrollTo(0, scrollPos);
+  }
+
+  function paintBar() {
+    if (phase === 'scan') return;
+    if (phase === 'build') {
+      statusEl.textContent = `${agents.length} agents | ${done} / ${layers.length} layers`;
+      fill.style.width = `${(done / layers.length) * 100}%`;
+      const shown = agents.slice(-4).map((a) => a.color).join();
+      if (dots.dataset.shown !== shown) {
+        dots.dataset.shown = shown;
+        dots.innerHTML = agents.slice(-4).map((a) => `<i style="background:${a.color}"></i>`).join('');
+      }
+    }
+  }
+
+  function enterFlock() {
+    phase = 'flock';
+    statusEl.textContent = `Rebuilt by ${agents.length} agents in ${wall.toFixed(1)}s`;
+    fill.style.width = '100%';
+    tourBtn.hidden = speedBtn.hidden = closeBtn.hidden = true;
+    goBtn.hidden = replayBtn.hidden = false;
+    goBtn.focus({ preventScroll: true });
+  }
+
+  function frame(now) {
+    const realDt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    const dt = Math.min(0.05, realDt) * (phase === 'flock' ? 1 : speed);
+    t += dt;
+    wall += realDt;
+
+    if (phase === 'scan' && t >= SCAN) {
+      phase = 'build';
+      nextStart = t;
+      workY = 0;
+    }
+    if (phase === 'build') {
+      const wanted = Math.round(FIRST_AGENTS + (MAX_AGENTS - FIRST_AGENTS) * (nextIndex / layers.length));
+      while (agents.length < wanted) spawnAgent();
+      assignLayers();
+      tour(realDt);
+      if (done === layers.length) enterFlock();
+    }
+    agents.forEach((a) => moveAgent(a, dt));
+    paintBar();
+    raf = requestAnimationFrame(frame);
+  }
+
+  function revealAll() {
+    all.forEach((el) => {
+      el.classList.remove('pending', 'building');
+      el.style.clipPath = '';
+    });
+  }
+
+  function stop() {
+    cancelAnimationFrame(raf);
+    phase = 'idle';
+    agents = [];
+    stage.replaceChildren();
+    stage.style.height = '0';
+  }
+
+  function goLive() {
+    stop();
+    revealAll();
+    bar.hidden = true;
+  }
+
+  function run() {
+    stop();
+    scrollTo(0, 0);
+    scrollPos = 0;
+    revealAll();
+    stage.style.height = `${document.documentElement.scrollHeight}px`;
+    layers = all
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .sort((a, b) => Math.round(a.r.top / 40) - Math.round(b.r.top / 40) || a.r.left - b.r.left)
+      .map((o) => o.el);
+    all.forEach((el) => el.classList.add('pending'));
+
+    t = 0; wall = 0; done = 0; nextIndex = 0; workY = 0;
+    touring = true;
+    tourBtn.setAttribute('aria-pressed', 'true');
+    tourBtn.textContent = 'Touring';
+    tourBtn.hidden = speedBtn.hidden = closeBtn.hidden = false;
+    goBtn.hidden = replayBtn.hidden = true;
+    statusEl.textContent = 'Scanning page…';
+    fill.style.width = '0';
+    dots.innerHTML = '';
+    dots.dataset.shown = '';
+    bar.hidden = false;
+
+    for (let i = 0; i < FIRST_AGENTS; i++) spawnAgent();
+    phase = 'scan';
+    last = performance.now();
+    raf = requestAnimationFrame(frame);
+  }
+
+  function stopTouring() {
+    touring = false;
+    tourBtn.setAttribute('aria-pressed', 'false');
+    tourBtn.textContent = 'Tour';
+  }
+
+  tourBtn.addEventListener('click', () => {
+    touring = !touring;
+    tourBtn.setAttribute('aria-pressed', String(touring));
+    tourBtn.textContent = touring ? 'Touring' : 'Tour';
+    scrollPos = scrollY;
+  });
+  speedBtn.addEventListener('click', () => {
+    speed = speed === 4 ? 1 : speed * 2;
+    speedBtn.textContent = `${speed}x`;
+  });
+  closeBtn.addEventListener('click', goLive);
+  goBtn.addEventListener('click', goLive);
+  replayBtn.addEventListener('click', run);
+  $('again').addEventListener('click', run);
+
+  addEventListener('pointermove', (e) => { pointer = { x: e.clientX, y: e.clientY }; }, { passive: true });
+
+  // Scrolling by hand takes over from the tour, so the page never fights the viewer.
+  addEventListener('wheel', () => { if (phase === 'build') stopTouring(); }, { passive: true });
+  addEventListener('touchmove', () => { if (phase === 'build') stopTouring(); }, { passive: true });
+  addEventListener('resize', () => {
+    if (phase !== 'idle') stage.style.height = `${document.documentElement.scrollHeight}px`;
+  });
+
+  drawWaves();
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // A page opened in a background tab waits, so the viewer still sees the build from the start.
+    if (document.visibilityState === 'visible') run();
+    else document.addEventListener('visibilitychange', run, { once: true });
+  }
+})();
+</script>
+
+</body></html>

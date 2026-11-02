@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Superpowers Chat Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+/* Layout: stages on the left, the conversation in the middle, the plan and ledger on the right. */
+:root {
+  --bg: #f6f4ef;
+  --side: #efece5;
+  --card: #fffefb;
+  --bubble: #e9e5dc;
+  --fg: #2a2823;
+  --muted: #6f6b61;
+  --line: #dcd8cd;
+  --accent: #a4532f;
+  --impl: #0f7f73;
+  --review: #9a6a00;
+  --fix: #b8452f;
+  --final: #2a62a8;
+  --pass: #2c7a3f;
+  --serif: "Source Serif 4", Georgia, serif;
+  --sans: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #262522; --side: #1f1e1c; --card: #302f2b; --bubble: #3a3833; --fg: #ece9e1; --muted: #a8a498; --line: #45433d;
+    --accent: #e08a62; --impl: #6fd3c7; --review: #e6b64f; --fix: #ff9b86; --final: #8dbcf5; --pass: #8fdc9a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #262522; --side: #1f1e1c; --card: #302f2b; --bubble: #3a3833; --fg: #ece9e1; --muted: #a8a498; --line: #45433d;
+  --accent: #e08a62; --impl: #6fd3c7; --review: #e6b64f; --fix: #ff9b86; --final: #8dbcf5; --pass: #8fdc9a; color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 15px/1.55 var(--sans); overflow: hidden; }
+button, textarea { color: inherit; font: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font: 400 .86em/1.4 var(--mono); padding: 1px 4px; background: var(--bubble); border-radius: 4px; overflow-wrap: anywhere; }
+
+.app { height: 100%; display: grid; grid-template-columns: 228px minmax(0, 1fr) 320px; }
+.app.no-panel { grid-template-columns: 228px minmax(0, 1fr); }
+
+/* Stages */
+.side { display: flex; flex-direction: column; gap: 18px; padding: 16px 12px; background: var(--side); border-right: 1px solid var(--line); min-width: 0; overflow-y: auto; }
+.brand { font: 600 17px/1.2 var(--serif); padding-inline: 8px; }
+.side h2 { margin: 0 0 6px; padding-inline: 8px; font: 500 11px/1.4 var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+#stages { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+#stages li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; color: var(--muted); }
+#stages li i { width: 8px; height: 8px; flex: none; border-radius: 50%; border: 1.5px solid var(--muted); }
+#stages li.done { color: var(--fg); }
+#stages li.done i { background: var(--pass); border-color: var(--pass); }
+#stages li.now { background: var(--bubble); color: var(--fg); font-weight: 500; }
+#stages li.now i { background: var(--accent); border-color: var(--accent); }
+.side p { margin: auto 0 0; padding-inline: 8px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+/* Main column */
+.main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--line); }
+#chatTitle { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34ch; }
+.pill { padding: 2px 8px; border: 1px solid var(--accent); border-radius: 99px; font-size: 12px; color: var(--accent); white-space: nowrap; }
+.ctrl { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.ctrl button { padding: 3px 9px; background: none; border: 1px solid var(--line); border-radius: 7px; font-size: 13px; white-space: nowrap; }
+.ctrl button:hover { background: var(--bubble); }
+
+#chat { overflow-y: auto; min-height: 0; padding-block: 22px 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+#log { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+#log > * { min-width: 0; }
+.user { justify-self: end; max-width: 84%; padding: 9px 14px; background: var(--bubble); border-radius: 16px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.agent { font: 400 16.5px/1.6 var(--serif); overflow-wrap: anywhere; }
+.agent p { margin: 0 0 10px; }
+.agent p:last-child { margin-bottom: 0; }
+.agent ul { margin: 0 0 10px; padding-left: 22px; display: grid; gap: 4px; }
+.agent ul:last-child { margin-bottom: 0; }
+.tool { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); min-width: 0; }
+.tool span { min-width: 0; overflow-wrap: anywhere; }
+.tool i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--pass); }
+.tool.busy i { background: none; border: 2px solid var(--muted); border-top-color: transparent; width: 11px; height: 11px; animation: spin .8s linear infinite; }
+.tool.skill { color: var(--accent); font-weight: 500; }
+.tool.skill i { border-radius: 2px; background: var(--accent); transform: rotate(45deg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.doc { display: grid; gap: 2px; justify-self: start; width: min(420px, 100%); padding: 10px 14px; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.doc:hover { border-color: var(--accent); }
+.doc b { font-weight: 600; }
+.doc small { font: 400 12px/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+
+.sub { --c: var(--impl); background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 8px; }
+.sub.review { --c: var(--review); }
+.sub.fix { --c: var(--fix); }
+.sub.final { --c: var(--final); }
+.sub summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 12px; cursor: pointer; list-style: none; }
+.sub summary::-webkit-details-marker { display: none; }
+.sub .who { font-weight: 600; font-size: 14px; color: var(--c); }
+.sub .tier { font: 400 11.5px/1.5 var(--mono); color: var(--muted); white-space: nowrap; }
+.sub .state { grid-column: 1 / -1; font-size: 13.5px; color: var(--muted); }
+.sub.bad .state { color: var(--fix); font-weight: 500; }
+.sub.ok .state { color: var(--pass); }
+.sub .more { padding: 0 12px 10px; font-size: 13.5px; color: var(--muted); }
+
+.choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.choices button, .chip { padding: 7px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; text-align: left; }
+.choices button:hover, .chip:hover { border-color: var(--accent); }
+.choices button.picked { border-color: var(--accent); background: var(--bubble); }
+.choices button:disabled { cursor: default; opacity: .65; }
+.choices button.picked:disabled { opacity: 1; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 5px 10px; font-size: 13.5px; }
+
+.foot { padding: 8px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+.composer { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; padding: 10px 10px 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 2px 10px rgba(0, 0, 0, .05); }
+#input { width: 100%; min-height: 26px; max-height: 120px; padding: 2px 0; background: none; border: 0; outline: 0; resize: none; font-size: 15.5px; line-height: 1.5; }
+#send { width: 34px; height: 34px; display: grid; place-items: center; background: var(--accent); border: 0; border-radius: 10px; color: var(--card); font-size: 17px; line-height: 1; }
+#send:disabled { opacity: .4; cursor: default; }
+.legal { max-width: 720px; margin: 6px auto 0; text-align: center; font-size: 12px; color: var(--muted); }
+
+/* Plan and ledger */
+.panel { display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--side); border-left: 1px solid var(--line); min-width: 0; min-height: 0; }
+.tabs { display: flex; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.tabs button { padding: 3px 10px; background: none; border: 1px solid transparent; border-radius: 7px; font-size: 13.5px; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--bubble); color: var(--fg); font-weight: 500; }
+#closePanel { margin-left: auto; }
+.pane { overflow-y: auto; padding: 14px; min-height: 0; }
+.counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.counts div { display: grid; }
+.counts b { font: 600 22px/1.2 var(--serif); font-variant-numeric: tabular-nums; }
+.counts span { font-size: 11.5px; line-height: 1.3; color: var(--muted); }
+#tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+#tasks li { display: grid; gap: 1px; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+#tasks b { font-weight: 500; font-size: 14px; overflow-wrap: anywhere; }
+#tasks span { font-size: 12.5px; color: var(--muted); }
+#tasks li.done span { color: var(--pass); }
+#tasks li.bad span { color: var(--fix); }
+#tasks li.active { border-color: var(--accent); }
+.empty { color: var(--muted); font-size: 13.5px; }
+#ledgerList { display: grid; gap: 6px; font: 400 12px/1.5 var(--mono); overflow-wrap: anywhere; }
+#docView h3 { margin: 0 0 2px; font: 600 16px/1.3 var(--serif); }
+#docView small { display: block; margin-bottom: 10px; font: 400 11.5px/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+#docView ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 14px; }
+
+#pointer { position: fixed; top: 0; left: 0; z-index: 50; width: 22px; height: 22px; pointer-events: none; transition: transform .45s ease-in-out; }
+#pointer svg { display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .4)); }
+#pointer.press svg { transform: scale(.82); }
+
+@media (max-width: 1120px) {
+  .app, .app.no-panel { grid-template-columns: 228px minmax(0, 1fr); }
+  .panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(340px, 92vw); z-index: 40; box-shadow: -8px 0 24px rgba(0, 0, 0, .2); }
+}
+@media (max-width: 820px) {
+  .app, .app.no-panel { grid-template-columns: minmax(0, 1fr); }
+  .side { display: none; }
+  #chatTitle { max-width: 100%; flex: 1 1 100%; }
+  .ctrl { margin-left: 0; }
+  .agent { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { #pointer { transition: none; } .tool.busy i { animation: none; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="side" aria-label="Workflow stages">
+    <div class="brand">Superpowers demo</div>
+    <div>
+      <h2>Stages</h2>
+      <ol id="stages"></ol>
+    </div>
+    <p>Independent demo. Not made by Anthropic or the Superpowers team. Based on the skills in Superpowers v7.0.1.</p>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <span id="chatTitle">Add password reset</span>
+      <span class="pill">Simulated demo</span>
+      <div class="ctrl" role="group" aria-label="Demo controls">
+        <button id="pause" type="button">Pause</button>
+        <button id="speed" type="button" aria-label="Playback speed">1x</button>
+        <button id="skip" type="button">Skip to end</button>
+        <button id="replay" type="button">Replay</button>
+        <button id="panelBtn" type="button" aria-expanded="true">Plan</button>
+      </div>
+    </div>
+    <div id="chat"><div id="log" role="log" aria-label="Simulated conversation"></div></div>
+    <div class="foot">
+      <form class="composer" id="form">
+        <textarea id="input" rows="1" aria-label="Message" placeholder="The demo is playing" readonly></textarea>
+        <button id="send" type="submit" aria-label="Send message" disabled>&#8593;</button>
+      </form>
+      <p class="legal">Scripted demo. No AI is connected, and nothing is really built.</p>
+    </div>
+  </main>
+
+  <aside class="panel" id="panel" aria-label="Plan and ledger">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="plan" aria-selected="true">Plan</button>
+      <button type="button" role="tab" data-tab="ledger" aria-selected="false">Ledger</button>
+      <button type="button" role="tab" data-tab="doc" aria-selected="false">Docs</button>
+      <button id="closePanel" type="button" aria-label="Close the panel">×</button>
+    </div>
+    <div class="pane" id="planPane">
+      <div class="counts">
+        <div><b id="cRun">0</b><span>subagents running</span></div>
+        <div><b id="cAll">0</b><span>subagents used</span></div>
+        <div><b id="cDone">0</b><span>tasks done</span></div>
+      </div>
+      <p class="empty" id="noTasks">The plan appears here once it's written.</p>
+      <ol id="tasks"></ol>
+    </div>
+    <div class="pane" id="ledgerPane" hidden>
+      <p class="empty" id="noLedger">The ledger starts when the build starts. It's the record that survives if the session loses its memory.</p>
+      <div id="ledgerList"></div>
+    </div>
+    <div class="pane" id="docPane" hidden>
+      <p class="empty" id="noDoc">Click a document in the chat to read it here.</p>
+      <div id="docView" hidden></div>
+    </div>
+  </aside>
+</div>
+<div id="pointer" aria-hidden="true" hidden><svg width="22" height="22" viewBox="0 0 18 18"><path d="M2 1l13 6.2-5.6 1.7L7.2 15z" fill="#2a2823" stroke="#fff" stroke-width="1.2"/></svg></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const chat = $('chat'), log = $('log'), input = $('input'), send = $('send'), form = $('form'), pointer = $('pointer');
+  const pauseBtn = $('pause'), speedBtn = $('speed'), skipBtn = $('skip');
+  const ABORT = { aborted: true };
+  const STAGES = ['Brainstorm', 'Plan', 'Worktree', 'Build', 'Final review', 'Finish'];
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  function mdToHtml(md) {
+    return md.split(/\n\n+/).map((block) => {
+      const lines = block.split('\n');
+      if (lines.every((l) => l.startsWith('- '))) return `<ul>${lines.map((l) => `<li>${inline(l.slice(2))}</li>`).join('')}</ul>`;
+      return `<p>${inline(block)}</p>`;
+    }).join('');
+  }
+
+  /* The demo clock: every wait runs through it, so pause, speed and skip work everywhere. */
+  let timers = [], speed = 1, paused = false, skipping = false, token = 0, last = performance.now(), waiter = null;
+
+  function sleep(ms) {
+    const mine = token;
+    if (skipping) return Promise.resolve().then(() => { if (mine !== token) throw ABORT; });
+    return new Promise((resolve, reject) => timers.push({ left: ms, resolve, reject }));
+  }
+
+  function tick(stamp) {
+    const dt = Math.min(100, stamp - last);
+    last = stamp;
+    if (!paused && timers.length) {
+      const due = [];
+      timers = timers.filter((t) => { t.left -= dt * speed; if (t.left <= 0) { due.push(t); return false; } return true; });
+      due.forEach((t) => t.resolve());
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function cancelAll() {
+    token++;
+    const old = timers;
+    timers = [];
+    old.forEach((t) => t.reject(ABORT));
+    if (waiter) { const w = waiter; waiter = null; w.reject(ABORT); }
+  }
+
+  /* Scrolling: follow new messages unless the reader has scrolled up. */
+  let follow = true;
+  chat.addEventListener('scroll', () => { follow = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80; }, { passive: true });
+  const toBottom = () => { if (follow) chat.scrollTop = chat.scrollHeight; };
+  function add(el) { log.append(el); toBottom(); return el; }
+  function div(cls, html) { const d = document.createElement('div'); d.className = cls; if (html !== undefined) d.innerHTML = html; return d; }
+
+  /* Panel state */
+  let dispatched = 0, running = 0, tasksDone = 0, taskEls = [];
+  function counts() {
+    $('cRun').textContent = running;
+    $('cAll').textContent = dispatched;
+    $('cDone').textContent = tasksDone;
+  }
+  function ledger(line) {
+    $('noLedger').hidden = true;
+    const row = document.createElement('div');
+    row.textContent = line;
+    $('ledgerList').append(row);
+  }
+  function setStage(i) {
+    [...$('stages').children].forEach((li, n) => {
+      li.className = n < i ? 'done' : n === i ? 'now' : '';
+      if (n === i) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+    });
+  }
+  function setTasks(tasks) {
+    $('tasks').replaceChildren();
+    taskEls = tasks.map((t, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<b>${i + 1}. ${esc(t.name)}</b><span>Waiting</span>`;
+      $('tasks').append(li);
+      return li;
+    });
+    $('noTasks').hidden = tasks.length > 0;
+  }
+  function taskState(i, text, cls = '') {
+    const li = taskEls[i];
+    if (!li) return;
+    li.className = cls;
+    li.querySelector('span').textContent = text;
+  }
+  function showTab(name) {
+    document.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    $('planPane').hidden = name !== 'plan';
+    $('ledgerPane').hidden = name !== 'ledger';
+    $('docPane').hidden = name !== 'doc';
+  }
+  function openDoc(doc) {
+    $('noDoc').hidden = true;
+    const view = $('docView');
+    view.hidden = false;
+    view.innerHTML = `<h3>${esc(doc.title)}</h3><small>${esc(doc.path)}</small><ul>${doc.lines.map((l) => `<li>${inline(l)}</li>`).join('')}</ul>`;
+    setPanel(true);
+    showTab('doc');
+  }
+  function setPanel(open) {
+    $('panel').hidden = !open;
+    $('app').classList.toggle('no-panel', !open);
+    $('panelBtn').setAttribute('aria-expanded', String(open));
+  }
+
+  /* Chat pieces */
+  async function say(md) {
+    const el = add(div('agent'));
+    if (skipping) { el.innerHTML = mdToHtml(md); toBottom(); await sleep(0); return; }
+    const parts = md.split(/(\s+)/);
+    let shown = '';
+    for (let i = 0; i < parts.length; i += 4) {
+      shown += parts.slice(i, i + 4).join('');
+      el.innerHTML = mdToHtml(shown);
+      toBottom();
+      await sleep(38);
+    }
+    await sleep(320);
+  }
+  async function skill(name, stage) {
+    if (stage !== undefined) setStage(stage);
+    add(div('tool skill', `<i></i><span>Using skill: ${esc(name)}</span>`));
+    await sleep(500);
+  }
+  async function tool(busy, done, ms = 1000) {
+    const el = add(div('tool busy', `<i></i><span>${inline(busy)}</span>`));
+    await sleep(ms);
+    el.className = 'tool';
+    el.querySelector('span').innerHTML = inline(done);
+    toBottom();
+    await sleep(200);
+  }
+  function docCard(doc) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'doc';
+    b.innerHTML = `<b>${esc(doc.title)}</b><small>${esc(doc.path)}</small>`;
+    b.addEventListener('click', () => openDoc(doc));
+    add(b);
+    return sleep(450);
+  }
+  async function sub({ role, kind = '', title, tier, given, work, result, bad = false, ms = 1800, onDone }) {
+    dispatched++;
+    running = 1;
+    counts();
+    const d = document.createElement('details');
+    d.className = `sub ${kind}`;
+    d.innerHTML = `<summary><span class="who">${esc(role)}: ${esc(title)}</span><span class="tier">${esc(tier)}</span><span class="state">${esc(work)}</span></summary><div class="more">Given only: ${esc(given)}</div>`;
+    add(d);
+    await sleep(ms);
+    running = 0;
+    d.classList.add(bad ? 'bad' : 'ok');
+    d.querySelector('.state').textContent = result;
+    counts();
+    toBottom();
+    if (onDone) onDone();
+    await sleep(350);
+  }
+
+  async function pointAt(el) {
+    if (skipping) return;
+    const r = el.getBoundingClientRect();
+    pointer.hidden = false;
+    pointer.style.transitionDuration = `${450 / speed}ms`;
+    pointer.style.transform = `translate(${r.left + r.width * 0.6}px, ${r.top + r.height * 0.55}px)`;
+    await sleep(520);
+    pointer.classList.add('press');
+    await sleep(130);
+    pointer.classList.remove('press');
+  }
+
+  function userBubble(text) {
+    const el = div('user');
+    el.textContent = text;
+    add(el);
+    follow = true;
+    toBottom();
+  }
+
+  async function typedUser(text) {
+    if (!skipping) {
+      for (let i = 1; i <= text.length; i++) {
+        input.value = text.slice(0, i);
+        await sleep(30);
+      }
+      send.disabled = false;
+      await pointAt(send);
+      send.disabled = true;
+    }
+    input.value = '';
+    userBubble(text);
+    await sleep(350);
+  }
+
+  // Shows options. In the autoplay the pointer picks one; afterwards the person does, or types an answer.
+  async function ask(options, autoIndex) {
+    const box = add(div('choices'));
+    const buttons = options.map((label, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      box.append(b);
+      return b;
+    });
+    toBottom();
+    let picked;
+    if (autoIndex !== undefined) {
+      await sleep(600);
+      await pointAt(buttons[autoIndex]);
+      pointer.hidden = true;
+      picked = { index: autoIndex, text: options[autoIndex] };
+    } else {
+      setComposer('answer');
+      picked = await new Promise((resolve, reject) => {
+        waiter = { resolve, reject };
+        buttons.forEach((b, i) => b.addEventListener('click', () => {
+          if (!waiter) return;
+          waiter = null;
+          resolve({ index: i, text: options[i] });
+        }));
+      });
+      setComposer('busy');
+    }
+    buttons.forEach((b, i) => {
+      b.disabled = true;
+      if (i === picked.index) b.classList.add('picked');
+    });
+    userBubble(picked.text);
+    await sleep(350);
+    return picked;
+  }
+
+  /* One whole workflow, used by the autoplay and by anything the person asks to build. */
+  async function workflow(c) {
+    const auto = c.auto;
+    const sha = (n) => ((n * 2654435761) >>> 0).toString(16).padStart(8, '0').slice(0, 7);
+    let n = c.seed;
+    const next = () => sha(++n);
+
+    $('chatTitle').textContent = c.title;
+    setStage(0);
+    if (auto) await typedUser(c.first);
+    await skill('brainstorming', 0);
+    await tool(c.reading, c.read);
+    await say(c.q1);
+    const a1 = await ask(c.q1Options, auto ? 0 : undefined);
+    await say(c.q2);
+    const a2 = await ask(c.q2Options, auto ? 1 : undefined);
+
+    const spec = c.spec(a1.text, a2.text);
+    await say('Here is the design. I won’t build anything until you approve it.');
+    await docCard(spec);
+    const approve = await ask(['Approved, write the plan', 'I want a change'], auto ? 0 : undefined);
+    if (approve.index === 1) {
+      await say('In a real session you’d say what to change, and I’d update the doc and ask again. This demo records that as done and moves on.');
+    }
+
+    await skill('writing-plans', 1);
+    await tool('Writing the plan', `Plan saved with ${c.tasks.length} tasks`);
+    setTasks(c.tasks);
+    await docCard(c.plan);
+    await say(`Please read the plan. It has exact files, signatures and tests for each task, plus global constraints copied from the spec.\n\nHow should I run it? I recommend **Subagent-driven**, because ${c.why}.`);
+    const mode = await ask(['Subagent-driven', 'Native (one session, one final review)'], auto ? 0 : undefined);
+
+    await skill('using-git-worktrees', 2);
+    await tool('Creating an isolated worktree', `Created \`.worktrees/${c.slug}\`. Baseline: ${c.baseline} tests pass`);
+
+    if (mode.index === 1) await nativeBuild(c, next); else await subagentBuild(c, next, auto);
+
+    await skill('finishing-a-development-branch', 5);
+    await tool('Running the full test suite', `${c.baseline + c.added} tests pass`);
+    await say('The tests pass, so it’s your call how to finish.');
+    const end = await ask(['Merge locally', 'Push and open a pull request', 'Keep the branch as it is'], auto ? 1 : undefined);
+    if (end.index === 0) await tool('Merging into the base branch', 'Merged, tests pass on the result, worktree removed');
+    if (end.index === 1) await tool('Pushing the branch', 'Pushed and opened a pull request. The worktree stays for review feedback');
+    if (end.index === 2) await tool('Recording where it is', `Kept the branch and \`.worktrees/${c.slug}\``);
+    setStage(STAGES.length);
+    $('cRun').textContent = 0;
+  }
+
+  async function subagentBuild(c, next, auto) {
+    await skill('subagent-driven-development', 3);
+    const planPath = c.plan.path;
+    ledger(`# SDD ledger — plan: ${planPath}`);
+    await tool('Scanning the plan for conflicts', 'Pre-flight scan done, one conflict ruled on');
+    ledger(`Pre-flight: ${c.tasks.length} tasks and their shared interfaces checked`);
+    ledger(`Ruling: ${c.ruling}`);
+    await say(`I won’t pause between tasks. I’ll stop only for something irreversible, security-sensitive, outside this worktree, or if the plan turns out to be unworkable. Implementers run **one at a time**.`);
+
+    for (let i = 0; i < c.tasks.length; i++) {
+      const t = c.tasks[i], label = `Task ${i + 1}`;
+      const base = next();
+      taskState(i, 'Implementing', 'active');
+      let head = next();
+      await sub({
+        role: 'Implementer', title: label, tier: t.tier,
+        given: `task-${i + 1}-brief.md, the interfaces it touches, and where to write its report`,
+        work: `Writing a failing test, then ${t.name.toLowerCase()}`, result: t.status || 'DONE: commits made, tests pass', ms: 2100
+      });
+      if (t.note && i === 0) await say(t.note);
+      taskState(i, 'In review', 'active');
+      const given = `the brief, the report, the diff from ${base}, and the global constraints`;
+      if (t.specFail) {
+        await sub({ role: 'Reviewer', kind: 'review', title: label, tier: 'Mid-tier', given, work: 'Checking spec and quality', result: `Spec: fail. ${t.specFail}. Quality: approved`, bad: true });
+        taskState(i, `Fix round 1: ${t.specFail}`, 'bad active');
+        await sub({ role: 'Implementer (resumed)', kind: 'fix', title: `${label} fix round 1`, tier: t.tier, given: 'the findings word for word, in its existing context', work: 'Fixing the finding and rerunning the covering tests', result: 'DONE: fix committed, covering tests pass', ms: 1600 });
+        head = next();
+        await sub({ role: 'Re-reviewer', kind: 'review', title: `${label} fix only`, tier: 'Cheap to mid-tier', given: 'the findings and the fix diff', work: 'Checking only the finding and the fix', result: 'Addressed, nothing new', ms: 1300 });
+        ledger(`Task ${i + 1}: fix round 1/5 (1 addressed, 0 open; commits ${base}..${head})`);
+      } else {
+        await sub({ role: 'Reviewer', kind: 'review', title: label, tier: 'Mid-tier', given, work: 'Checking spec and quality', result: 'Spec: pass. Quality: approved' });
+      }
+      ledger(`Task ${i + 1}: complete (commits ${base}..${head}, review clean)`);
+      tasksDone++;
+      taskState(i, 'Done, review clean', 'done');
+      counts();
+    }
+
+    setStage(4);
+    add(div('tool skill', '<i></i><span>Final whole-branch review</span>'));
+    await sleep(300);
+    await sub({ role: 'Final reviewer', kind: 'final', title: 'whole branch', tier: 'Most capable', given: 'the full branch diff and the ledger’s deferred items', work: 'Reading the whole change', result: `1 Important finding: ${c.finalFinding}`, bad: true, ms: 2300 });
+    await sub({ role: 'Fixer', kind: 'fix', title: 'all final findings', tier: 'Mid-tier', given: 'the complete findings list, in one dispatch', work: 'Fixing the findings', result: 'DONE: fix committed, tests pass', ms: 1500 });
+    await sub({ role: 'Re-reviewer', kind: 'review', title: 'fix wave', tier: 'Mid-tier', given: 'the findings and the fix diff', work: 'Checking the fix wave', result: 'Addressed, nothing new', ms: 1200 });
+    await say(`Everything is reviewed. **Rulings I made**, so you can overturn any of them:\n\n- ${c.ruling}`);
+  }
+
+  async function nativeBuild(c, next) {
+    await skill('executing-plans', 3);
+    ledger(`# SDD ledger — plan: ${c.plan.path}`);
+    await say('I’ll do every task myself in this session. It’s the cheapest and fastest route, but nothing gets independent review until the end.');
+    for (let i = 0; i < c.tasks.length; i++) {
+      taskState(i, 'Implementing in this session', 'active');
+      await tool(`Task ${i + 1}: ${c.tasks[i].name}`, `Task ${i + 1} committed, tests pass`, 1300);
+      ledger(`Task ${i + 1}: complete (commit ${next()})`);
+      tasksDone++;
+      taskState(i, 'Done, not reviewed yet', 'done');
+      counts();
+    }
+    setStage(4);
+    add(div('tool skill', '<i></i><span>Final whole-branch review</span>'));
+    await sub({ role: 'Final reviewer', kind: 'final', title: 'whole branch', tier: 'Most capable', given: 'the full branch diff', work: 'Reading the whole change', result: `1 Important finding: ${c.finalFinding}`, bad: true, ms: 2200 });
+    await tool('Fixing the finding', 'Fixed and committed', 1100);
+    await say('The one reviewer found a problem that per-task reviews might have caught earlier. That’s the trade-off for the lower cost.');
+  }
+
+  const DEMO = {
+    auto: true, seed: 11, title: 'Add password reset', slug: 'password-reset', baseline: 128, added: 14,
+    first: 'I want to add password reset to my app.',
+    reading: 'Reading `src/auth/`', read: 'Read 3 files in `src/auth/`',
+    q1: 'Before I build anything, I want to understand what you need. How should people prove it’s them?',
+    q1Options: ['Email link, valid for 30 minutes', 'One-time code by email'],
+    q2: 'Got it. There are two sensible ways to build this.\n\n- **A. Signed token:** no new storage, but it can’t be revoked or limited to one use.\n- **B. Stored token:** a small new table, and each link works once and can be revoked.\n\nI recommend **B**, because a reset link should only work once.',
+    q2Options: ['Go with A', 'Go with B'],
+    spec: (a1, a2) => ({
+      title: 'Password reset design', path: 'docs/superpowers/specs/2026-11-02-password-reset-design.md',
+      lines: [`Identity check: ${a1}`, `Approach: ${a2.replace('Go with ', 'option ')}, stored single-use tokens`, 'Links expire after exactly 30 minutes', 'The response never reveals whether an email address has an account', 'Out of scope: SMS and social login']
+    }),
+    plan: {
+      title: 'Password reset plan', path: 'docs/superpowers/plans/2026-11-02-password-reset.md',
+      lines: ['**Spec:** the approved design doc', '**Global constraints:** 30-minute expiry, single-use tokens, no account disclosure', '**Task 1:** `reset_tokens` table, with `create_token` and `consume_token`', '**Task 2:** `POST /password-reset`, consuming task 1’s functions', '**Task 3:** reset form and email, calling task 2’s endpoint', '**Review focus:** expired links, reused links, unknown emails, double submits, very long passwords']
+    },
+    tasks: [
+      { name: 'Tokens table', tier: 'Cheapest' },
+      { name: 'Reset API endpoint', tier: 'Mid-tier', specFail: 'Tokens never expire' },
+      { name: 'Form and email', tier: 'Mid-tier', status: 'DONE_WITH_CONCERNS: tests pass, but this file is getting large' }
+    ],
+    why: 'a mistake in account recovery is expensive and the tasks have clear boundaries',
+    ruling: 'The plan’s example said 60 minutes and the spec says 30, so tasks use 30, because the spec outranks the plan. If that’s wrong, one constant changes.',
+    finalFinding: 'reset requests have no rate limit'
+  };
+
+  function buildConfig(feature) {
+    const short = feature.length > 60 ? `${feature.slice(0, 57)}...` : feature;
+    const name = short.charAt(0).toUpperCase() + short.slice(1);
+    const slug = short.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'feature';
+    const stamp = '2026-11-02';
+    return {
+      auto: false, seed: 40 + feature.length, title: name, slug, baseline: 96, added: 11,
+      reading: 'Reading the code this touches', read: 'Read the related files',
+      q1: `Before I build anything, I want to understand what you need for **${short}**. What matters most?`,
+      q1Options: ['Keep it as simple as possible', 'Handle every edge case', 'Make it easy to extend later'],
+      q2: 'Thanks. I see two ways to build it.\n\n- **A. Inside the existing code:** the smallest change, but it adds to files that already do a lot.\n- **B. A small separate module:** a few more files, with clear boundaries and easier tests.\n\nI recommend **B**. It gives each task a clean boundary to review.',
+      q2Options: ['Go with A', 'Go with B'],
+      spec: (a1, a2) => ({
+        title: `${name}: design`, path: `docs/superpowers/specs/${stamp}-${slug}-design.md`,
+        lines: [`Goal: ${short}`, `Priority: ${a1}`, `Approach: ${a2.replace('Go with ', 'option ')}`, 'This demo fills in the design with placeholders. A real one would come from your project and answers.']
+      }),
+      plan: {
+        title: `${name}: plan`, path: `docs/superpowers/plans/${stamp}-${slug}.md`,
+        lines: ['**Spec:** the approved design doc', '**Global constraints:** exact values copied from the spec', '**Task 1:** core logic, with its failing test first', '**Task 2:** connect it to the app, consuming task 1’s interface', '**Task 3:** end-to-end test of the main path', '**Review focus:** the five inputs most likely to break it']
+      },
+      tasks: [
+        { name: 'Core logic', tier: 'Cheapest' },
+        { name: 'Connect it to the app', tier: 'Mid-tier', specFail: 'A required error state is missing' },
+        { name: 'End-to-end test', tier: 'Mid-tier' }
+      ],
+      why: 'the tasks have clear boundaries and each gets its own independent review',
+      ruling: 'Two tasks named the same function differently, so both now use the name in task 1. If that’s wrong, it’s a quick rename.',
+      finalFinding: 'one error path isn’t covered by a test'
+    };
+  }
+
+  /* Free chat after the demo */
+  const KB = [
+    { keys: ['review fail', 'fails', 'failed', 'fix loop', 'fix round', 'finding'], label: 'What happens when a review fails?', a: 'It enters the fix loop, with up to **five rounds** per task. Rounds 1 to 3 resume the same implementer, because it already knows the code. Rounds 4 and 5 use a fresh implementer on a stronger model. Each round ends with a re-review of only those findings and the fix.\n\nIf findings remain after round 5, the main agent rules on each one and records why. Nothing gets dropped silently.' },
+    { keys: ['parallel', 'at a time', 'one implementer', 'same time', 'at once', 'concurrent', 'simultaneous'], label: 'Why one implementer at a time?', a: 'Parallel implementers conflict with each other, so the skill treats them as a mistake. `dispatching-parallel-agents` is the skill for parallel work, and it’s meant for separate problems with no shared state, such as unrelated test failures.' },
+    { keys: ['model', 'tier', 'haiku', 'sonnet', 'opus', 'cheap', 'expensive'], label: 'Which model for each role?', a: 'Use the least powerful model that can do the job, and always name it, because an omitted model inherits your session’s.\n\n- **Cheapest:** plan has the complete code, or a single-file mechanical fix\n- **Mid-tier:** implementers working from prose, and task reviewers at least\n- **Most capable:** design judgment and the final whole-branch review\n- **Fix rounds 4 and 5:** at least one tier above the stuck implementer' },
+    { keys: ['interrupt', 'compact', 'resume', 'crash', 'lost', 'memory', 'restart'], label: 'What if the session is interrupted?', a: 'The ledger handles that. Conversation memory doesn’t survive compaction, but the ledger file and `git log` do. Tasks marked complete aren’t run again, and a task that was mid-fix resumes at its next round.' },
+    { keys: ['ledger', 'progress.md'], label: 'What is the ledger?', a: 'It’s `progress.md`, in a git-ignored workspace for each plan under `.superpowers/sdd/`. It records completed tasks, fix rounds, deferred findings and rulings. Open the **Ledger** tab on the right to see the one from this demo.' },
+    { keys: ['ruling', 'decision', 'decide'], label: 'What are rulings?', a: 'When a running plan hits a conflict or a gap, the main agent decides instead of stopping, and records what it decided, why, and what it costs if wrong. They all appear in a final **Rulings I made** list. That list is how those decisions reach you, so read it before merging.' },
+    { keys: ['stop', 'pause', 'check in', 'ask me', 'interrupt me', 'permission'], label: 'When does it stop and ask me?', a: 'Only for four things:\n\n- An irreversible or destructive operation\n- A security-sensitive action\n- A side effect outside the worktree, such as a merge, a shared push or a publish\n- A plan so broken that every way forward is a guess' },
+    { keys: ['native', 'inline', 'executing-plans', 'executing plans', 'difference', 'cheaper', 'cost'], label: 'Subagent-driven or Native?', a: '**Subagent-driven** uses a fresh context per task and per review, so it costs more but catches problems task by task.\n\n**Native** (`executing-plans`) does every task in one session with one final review, so it’s cheaper and faster. Try it yourself by asking me to build something and choosing Native.' },
+    { keys: ['plan', 'task size', 'size', 'granular', 'write a good'], label: 'What makes a good plan?', a: 'It holds the decisions an implementer can’t make alone: exact files, signatures, spec values and test assertions.\n\n- A task is the smallest piece with its own test cycle\n- Split only where a reviewer could reject one part and approve its neighbour\n- Avoid lines that decide nothing, such as "handle edge cases"\n- Avoid full function bodies, which turn the plan into the code' },
+    { keys: ['spec', 'brainstorm', 'design'], label: 'Why brainstorm first?', a: 'Nothing gets built until you approve a design. The spec then becomes the top authority: when the plan and the spec conflict, the spec wins. A clear small request can skip the questions, because brainstorming just does it and tells you.' },
+    { keys: ['worktree', 'branch', 'isolat'], label: 'Why a worktree?', a: 'It gives the work its own branch and folder, so your current branch isn’t touched. It also runs the tests first, so you know any later failures are new.' },
+    { keys: ['install', 'set up', 'setup', 'get started', 'plugin'], label: 'How do I install it?', a: 'In Claude Code, run `/plugin install superpowers@claude-plugins-official`. Then start a new session and send a request to build something. It should begin brainstorming before writing any code.' },
+    { keys: ['real', 'ai', 'are you', 'who are', 'connected', 'demo', 'fake'], label: 'Is this real?', a: 'No. I’m a script with prepared answers, and no AI is connected. Nothing is really read, built, pushed or merged here. The workflow itself comes from the skill files in Superpowers v7.0.1.' }
+  ];
+
+  const CHIP_ORDER = ['What happens when a review fails?', 'Why one implementer at a time?', 'Which model for each role?', 'What if the session is interrupted?', 'When does it stop and ask me?', 'Subagent-driven or Native?'];
+
+  function answerFor(text) {
+    const q = text.toLowerCase();
+    // Keywords match from the start of a word, and short ones must be the whole word, so "ai" doesn't match "main".
+    const matches = (key) => {
+      const safe = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(key.length <= 4 ? `\\b${safe}s?\\b` : `\\b${safe}`).test(q);
+    };
+    let best = null, score = 0;
+    KB.forEach((k) => {
+      const s = k.keys.reduce((sum, key) => sum + (matches(key) ? key.length : 0), 0);
+      if (s > score) { score = s; best = k; }
+    });
+    return best;
+  }
+
+  function buildRequest(text) {
+    const t = text.trim();
+    if (t.endsWith('?') || /^(what|why|how|when|which|who|where|is|are|does|do|can|should)\b/i.test(t)) return null;
+    const m = t.match(/\b(build|add|create|make|implement|develop|write|ship)\b\s+(.+)/i);
+    if (!m) return null;
+    return m[2].replace(/[.!\s]+$/, '').trim() || null;
+  }
+
+  function offerChips() {
+    const box = add(div('chips'));
+    CHIP_ORDER.forEach((label) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = label;
+      b.addEventListener('click', () => { if (mode === 'free') handle(label); });
+      box.append(b);
+    });
+    const build = document.createElement('button');
+    build.type = 'button';
+    build.className = 'chip';
+    build.textContent = 'Build a dark mode toggle';
+    build.addEventListener('click', () => { if (mode === 'free') handle('Build a dark mode toggle'); });
+    box.append(build);
+    toBottom();
+  }
+
+  async function handle(text) {
+    const mine = token;
+    setComposer('busy');
+    log.querySelectorAll('.chips').forEach((c) => c.remove());
+    userBubble(text);
+    try {
+      if (/^(replay|play again|restart|start over)\b/i.test(text.trim())) { play(); return; }
+      const feature = buildRequest(text);
+      if (feature) {
+        resetRun();
+        await workflow(buildConfig(feature));
+        await say('That’s the whole path for your request, simulated. Ask me about any part of it, or give me something else to build.');
+      } else {
+        await sleep(450);
+        const hit = answerFor(text);
+        await say(hit ? hit.a : 'I’m a scripted demo, so I can’t answer that. I can explain the workflow, or simulate a build if you start with something like "Build a search page". Here are some things I can answer.');
+      }
+      if (mine === token) { enterFree(); offerChips(); }
+    } catch (e) {
+      if (e !== ABORT) throw e;
+    }
+  }
+
+  function resetRun() {
+    dispatched = 0; running = 0; tasksDone = 0;
+    counts();
+    setTasks([]);
+    $('noTasks').hidden = false;
+    $('ledgerList').replaceChildren();
+    $('noLedger').hidden = false;
+    setStage(0);
+    showTab('plan');
+    pauseBtn.textContent = 'Pause';
+    paused = false;
+  }
+
+  /* Composer */
+  let mode = 'demo';
+  function setComposer(next) {
+    mode = next;
+    const open = next === 'free' || next === 'answer';
+    input.readOnly = !open;
+    send.disabled = !open;
+    input.placeholder = next === 'free' ? 'Ask a question, or say "Build ..."'
+      : next === 'answer' ? 'Choose an option above' : next === 'demo' ? 'The demo is playing' : 'The demo is working';
+    if (next === 'answer') { input.readOnly = true; send.disabled = true; }
+    pauseBtn.hidden = next !== 'demo' && next !== 'busy';
+    skipBtn.hidden = next !== 'demo';
+  }
+  function enterFree() {
+    pointer.hidden = true;
+    skipping = false;
+    setComposer('free');
+    input.value = '';
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (mode !== 'free' || !text) return;
+    input.value = '';
+    input.style.height = '';
+    handle(text);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+  });
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(120, input.scrollHeight)}px`;
+  });
+
+  async function play() {
+    cancelAll();
+    log.replaceChildren();
+    follow = true;
+    skipping = false;
+    input.value = '';
+    pointer.hidden = true;
+    $('docView').hidden = true;
+    $('noDoc').hidden = false;
+    resetRun();
+    setComposer('demo');
+    const mine = token;
+    try {
+      await workflow(DEMO);
+      await say('That’s the whole path, from one sentence to a reviewed pull request. **Now it’s your turn.** Ask about any part of it, or tell me something to build and you’ll make the choices yourself.');
+      if (mine === token) { enterFree(); offerChips(); follow = true; toBottom(); }
+    } catch (e) {
+      if (e !== ABORT) throw e;
+    }
+  }
+
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Play' : 'Pause';
+  });
+  speedBtn.addEventListener('click', () => {
+    speed = speed === 4 ? 1 : speed * 2;
+    speedBtn.textContent = `${speed}x`;
+  });
+  skipBtn.addEventListener('click', () => {
+    skipping = true;
+    paused = false;
+    pauseBtn.textContent = 'Pause';
+    pointer.hidden = true;
+    const old = timers;
+    timers = [];
+    old.forEach((t) => t.resolve());
+  });
+  $('replay').addEventListener('click', play);
+  $('panelBtn').addEventListener('click', () => setPanel($('panel').hidden));
+  $('closePanel').addEventListener('click', () => setPanel(false));
+  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+  /* Start */
+  STAGES.forEach((name) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<i></i>${name}`;
+    $('stages').append(li);
+  });
+  if (matchMedia('(max-width: 1120px)').matches) setPanel(false);
+  requestAnimationFrame(tick);
+
+  function start() {
+    play();
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) skipBtn.click();
+  }
+  if (document.visibilityState === 'visible') start();
+  else document.addEventListener('visibilitychange', start, { once: true });
+})();
+</script>
+</body>
+</html>

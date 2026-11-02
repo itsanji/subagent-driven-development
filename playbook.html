@@ -1,0 +1,593 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body>
+<title>Superpowers Subagent Playbook</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column of numbered path, live task loop, then rules and reference tables. */
+:root {
+  --bg: #14171f;
+  --panel: #1c2130;
+  --raised: #252b3d;
+  --fg: #eceaf2;
+  --muted: #a9adbf;
+  --line: #363d54;
+  --main: #ff5fa8;
+  --impl: #6fd3c7;
+  --review: #f4b942;
+  --fail: #ff8f7d;
+  --pass: #8fdc9a;
+  --dock: #0d0f15;
+  --display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+  --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body); overflow-x: hidden; }
+button { color: inherit; font: inherit; }
+a { color: var(--impl); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--review); outline-offset: 3px; }
+code { font: 400 .88em/1.4 var(--mono); overflow-wrap: anywhere; }
+
+.page {
+  max-width: 1000px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 72px;
+  display: grid; gap: 56px;
+}
+.page > * { min-width: 0; }
+section, .hero { display: grid; gap: 18px; min-width: 0; }
+h1, h2, h3 { margin: 0; font-family: var(--display); text-wrap: balance; }
+h1 { font-size: clamp(36px, 6vw, 60px); font-weight: 800; line-height: 1.02; letter-spacing: -.01em; }
+h2 { font-size: clamp(26px, 3.8vw, 36px); font-weight: 800; line-height: 1.12; }
+h3 { font-size: 18px; font-weight: 600; line-height: 1.25; }
+p { margin: 0; }
+.lede { max-width: 66ch; font-size: 18px; color: var(--muted); }
+.sub { max-width: 66ch; color: var(--muted); }
+.meta { font: 400 12.5px/1.5 var(--mono); color: var(--muted); }
+.jump { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14.5px; }
+
+.short { display: grid; gap: 8px; padding: 18px 20px; background: var(--panel); border: 1px solid var(--main); }
+.short strong { font: 500 12px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--main); }
+.short p { font-size: 18px; font-weight: 500; line-height: 1.45; max-width: 70ch; }
+
+.cmd { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; background: var(--dock); border: 1px solid var(--line); }
+.cmd pre { margin: 0; overflow-x: auto; font: 400 13.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.copy { padding: 4px 10px; background: var(--raised); border: 1px solid var(--line); border-radius: 6px; font: 400 12.5px/1.4 var(--mono); cursor: pointer; white-space: nowrap; }
+.copy:hover { border-color: var(--review); }
+.stack { display: grid; gap: 8px; }
+.label { font: 500 12px/1.4 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+
+/* The path */
+ol.path { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--line); }
+.path li { display: grid; grid-template-columns: 36px minmax(0, 1.05fr) minmax(0, 1.2fr) minmax(0, 1.2fr); gap: 6px 16px; padding-block: 16px; border-bottom: 1px solid var(--line); }
+.path .n { font: 800 24px/1.1 var(--display); color: var(--main); }
+.path .skill { font: 500 13.5px/1.4 var(--mono); overflow-wrap: anywhere; }
+.path .cell { font-size: 15px; min-width: 0; }
+.path .cell b { display: block; font: 500 11px/1.5 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.note { font-size: 14px; color: var(--muted); max-width: 72ch; }
+@media (max-width: 760px) {
+  .path li { grid-template-columns: 30px minmax(0, 1fr); }
+  .path .cell { grid-column: 2; }
+}
+
+/* Live task loop */
+#loop { position: relative; display: grid; gap: 12px; padding: 14px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+.loop-head { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 2px 10px; align-items: start; min-height: 74px; }
+#home { width: 24px; height: 24px; margin-top: 2px; }
+.loop-who { font: 500 12px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--main); }
+#caption { grid-column: 2; font-size: 16px; font-weight: 500; line-height: 1.4; min-height: 2.8em; max-width: 78ch; }
+.stations { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.station { display: grid; align-content: start; gap: 4px; min-height: 104px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); min-width: 0; }
+.station b { font: 500 11px/1.4 var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.station span { font: 400 12.5px/1.35 var(--mono); overflow-wrap: anywhere; }
+.station.fail { border-color: var(--fail); background: color-mix(in srgb, var(--fail) 12%, var(--bg)); }
+.station.fail span { color: var(--fail); }
+.station.pass span { color: var(--pass); }
+#ledger { display: grid; gap: 2px; padding: 8px 10px; background: var(--dock); border: 1px solid var(--line); font: 400 12px/1.5 var(--mono); min-width: 0; min-height: 138px; align-content: start; }
+#ledger b { font-weight: 500; letter-spacing: .04em; text-transform: uppercase; font-size: 11px; color: var(--muted); }
+#ledger span { overflow-wrap: anywhere; color: var(--muted); }
+#ledger span.new { color: var(--pass); }
+.controls { display: flex; align-items: center; gap: 10px; }
+.controls button { min-width: 74px; padding: 4px 10px; background: var(--review); border: 1px solid var(--review); border-radius: 6px; color: var(--dock); font: 500 13px/1.4 var(--mono); cursor: pointer; }
+#seek { flex: 1 1 auto; min-width: 60px; accent-color: var(--review); margin: 0; }
+#time { font: 400 12.5px/1.4 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.who-key { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 12px/1.4 var(--mono); color: var(--muted); }
+.who-key span { display: inline-flex; align-items: center; gap: 6px; }
+.who-key i { width: 9px; height: 9px; background: var(--c); }
+#stage { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.agent { position: absolute; top: 0; left: 0; width: 18px; height: 18px; will-change: transform; }
+.agent svg { display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .55)); }
+.agent b { position: absolute; left: 14px; top: 15px; padding: 0 5px; background: var(--c); color: var(--dock); font: 500 10.5px/1.5 var(--mono); white-space: nowrap; }
+.agent.flip b { left: auto; right: 14px; }
+.box { position: absolute; border: 1px solid var(--c); border-right-width: 2px; background: color-mix(in srgb, var(--c) 14%, transparent); }
+@media (max-width: 760px) {
+  .stations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .station { min-height: 92px; }
+  .station:last-child { grid-column: 1 / -1; }
+  .loop-head { min-height: 104px; }
+  #caption { min-height: 4.2em; }
+}
+
+/* Rules */
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 32px; }
+.rule { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.rule p { color: var(--muted); font-size: 15.5px; max-width: 50ch; }
+.tag { justify-self: start; margin-top: 2px; font: 400 11px/1.5 var(--mono); color: var(--muted); }
+.tag.mine { color: var(--main); }
+@media (max-width: 760px) { .rules { grid-template-columns: minmax(0, 1fr); } }
+
+.stops { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--muted); max-width: 66ch; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th { text-align: left; font: 500 11px/1.4 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 0 16px 8px 0; }
+td { padding: 11px 16px 11px 0; border-top: 1px solid var(--line); vertical-align: top; }
+td:first-child { font-weight: 500; }
+td.dim { color: var(--muted); }
+@media (max-width: 640px) {
+  table, tbody, tr, td { display: block; }
+  thead { display: none; }
+  tr { padding-block: 10px; border-top: 1px solid var(--line); }
+  td { border: 0; padding: 2px 0; }
+}
+
+.foot { display: grid; gap: 12px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 14.5px; color: var(--muted); }
+.foot ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.back { font-size: 16px; font-weight: 500; }
+</style>
+
+<div class="page">
+  <div class="hero">
+    <h1>Superpowers subagent playbook</h1>
+    <p class="lede">Superpowers is an open-source skills plugin for coding agents, from Jesse Vincent and Prime Radiant. Its <code>subagent-driven-development</code> skill runs a plan one task at a time: a new implementer, an independent review, then the next task. This guide shows how to set it up so that loop does good work.</p>
+    <p class="meta">Written from the skill files in Superpowers v7.0.1 (21 Oct 2026). Superpowers isn't made by Anthropic, and its skills change often.</p>
+    <div class="short">
+      <strong>The best way to use it</strong>
+      <p>Spend your attention on the spec and the plan, choose Subagent-driven, set a model for each role, and let it run without check-ins. Then read the list of decisions it made for you before you merge.</p>
+    </div>
+    <nav class="jump" aria-label="On this page">
+      <a href="#install">Install</a><a href="#path">The path</a><a href="#loop-section">One task's loop</a><a href="#plan">Write a good plan</a><a href="#run">While it runs</a><a href="#choose">Which skill to use</a><a href="#mistakes">Mistakes</a><a href="#prompts">Prompts</a>
+    </nav>
+  </div>
+
+  <section id="install">
+    <h2>Install and test it</h2>
+    <div class="stack">
+      <span class="label">In Claude Code</span>
+      <div class="cmd"><pre>/plugin install superpowers@claude-plugins-official</pre><button class="copy" type="button">Copy</button></div>
+    </div>
+    <div class="stack">
+      <span class="label">Then, in a new session, send this</span>
+      <div class="cmd"><pre>Let's make a react todo list</pre><button class="copy" type="button">Copy</button></div>
+    </div>
+    <p class="sub">The install works if the agent starts brainstorming before it writes any code. Other tools have their own install steps, listed in the <a href="https://github.com/obra/superpowers#installation" target="_blank" rel="noopener">Superpowers README</a>. The skill's helper scripts run through <code>bash</code>, so on Windows make sure your agent can reach it.</p>
+  </section>
+
+  <section id="path">
+    <h2>The path from idea to merge</h2>
+    <p class="sub">Skills are meant to trigger on their own, in this order. You make decisions at a few points, and the rest runs by itself.</p>
+    <ol class="path">
+      <li>
+        <span class="n">1</span>
+        <div class="skill">brainstorming</div>
+        <div class="cell"><b>You</b>Answer its questions, choose an approach, and approve the design.</div>
+        <div class="cell"><b>You get</b>A design doc in <code>docs/superpowers/specs/</code>. Nothing gets built before you approve it.</div>
+      </li>
+      <li>
+        <span class="n">2</span>
+        <div class="skill">writing-plans</div>
+        <div class="cell"><b>You</b>Read the plan, then choose Subagent-driven or Native.</div>
+        <div class="cell"><b>You get</b>A task-by-task plan in <code>docs/superpowers/plans/</code>, with a recommendation on how to run it.</div>
+      </li>
+      <li>
+        <span class="n">3</span>
+        <div class="skill">using-git-worktrees</div>
+        <div class="cell"><b>You</b>Usually nothing. If the existing tests fail, decide whether to continue.</div>
+        <div class="cell"><b>You get</b>An isolated branch with a known test baseline.</div>
+      </li>
+      <li>
+        <span class="n">4</span>
+        <div class="skill">subagent-driven-development</div>
+        <div class="cell"><b>You</b>Leave it running. It stops only for the four reasons listed under <a href="#run">While it runs</a>.</div>
+        <div class="cell"><b>You get</b>A conflict scan of the plan, then each task implemented and reviewed, tracked in a ledger file.</div>
+      </li>
+      <li>
+        <span class="n">5</span>
+        <div class="skill">Final whole-branch review</div>
+        <div class="cell"><b>You</b>Read the "Rulings I made" list when it finishes.</div>
+        <div class="cell"><b>You get</b>A review on the most capable model, one fix wave, and every decision taken on your behalf.</div>
+      </li>
+      <li>
+        <span class="n">6</span>
+        <div class="skill">finishing-a-development-branch</div>
+        <div class="cell"><b>You</b>Choose to merge, open a pull request, or keep the branch.</div>
+        <div class="cell"><b>You get</b>A full test run before the choice, and worktree cleanup after a merge.</div>
+      </li>
+    </ol>
+    <p class="note">Implementers also follow <code>test-driven-development</code> when a task calls for it, and <code>verification-before-completion</code> requires fresh evidence before anyone claims a pass. The README lists the worktree before planning, while the plan skill says to create it at execution time, so I've followed the skill.</p>
+  </section>
+
+  <section id="loop-section">
+    <h2>One task's loop</h2>
+    <p class="sub">This is what happens for each task in step 4, using a made-up password reset task with one failed review. Drag the slider to study any moment.</p>
+    <div id="loop">
+      <div class="loop-head">
+        <span id="home"></span>
+        <span class="loop-who">Controller (your main session)</span>
+        <p id="caption" aria-live="polite">The task is complete, and the ledger records it. The next implementer starts only now, so two never run at once.</p>
+      </div>
+      <div class="stations">
+        <div class="station" data-s="brief"><b>Task brief</b><span></span></div>
+        <div class="station" data-s="code"><b>Code and tests</b><span></span></div>
+        <div class="station" data-s="report"><b>Report</b><span></span></div>
+        <div class="station" data-s="package"><b>Review package</b><span></span></div>
+        <div class="station" data-s="verdict"><b>Verdict</b><span></span></div>
+      </div>
+      <div id="ledger">
+        <b>Ledger: progress.md</b>
+        <span># SDD ledger — plan: docs/superpowers/plans/2026-11-02-password-reset.md</span>
+        <span>Task 1: complete (commits 1f3a9c2..7be0d41, review clean)</span>
+        <span>Task 2: complete (commits 7be0d41..c09e5a7, review clean)</span>
+        <span class="row" data-l="fix"></span>
+        <span class="row" data-l="done"></span>
+      </div>
+      <div class="controls">
+        <button id="play" type="button">Pause</button>
+        <input id="seek" type="range" min="0" max="26" step="0.05" value="0" aria-label="Task loop position">
+        <span id="time">0:00 / 0:26</span>
+      </div>
+      <div class="who-key">
+        <span style="--c:var(--main)"><i></i>Controller</span>
+        <span style="--c:var(--impl)"><i></i>Implementer</span>
+        <span style="--c:var(--review)"><i></i>Reviewer</span>
+      </div>
+      <div id="stage" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <section id="plan">
+    <h2>Write a plan the loop can succeed with</h2>
+    <p class="sub">An implementer sees only its own task, so gaps in the plan become guesses in the code. Most of your leverage is here, before any subagent starts.</p>
+    <div class="rules">
+      <div class="rule"><h3>Keep the spec linked</h3><p>The spec outranks the plan when they conflict. Without one, the controller's decisions are only provisional.</p></div>
+      <div class="rule"><h3>Copy exact values into Global Constraints</h3><p>Version floors, naming rules and limits go here word for word. Every task inherits them, and they tell the reviewer what to look for.</p></div>
+      <div class="rule"><h3>Size tasks by what a reviewer can judge</h3><p>A task is the smallest piece with its own test cycle. Split only where a reviewer could reject one part and approve its neighbour, and fold setup and docs into the task that needs them.</p></div>
+      <div class="rule"><h3>Fill in every Interfaces block</h3><p>Each task lists what it consumes and produces, with exact names and types. That's how an implementer learns what neighbouring tasks use.</p></div>
+      <div class="rule"><h3>Decide things, then stop</h3><p>"Handle edge cases" decides nothing, and full function bodies turn the plan into the code. Give file paths, signatures, test assertions and spec values.</p></div>
+      <div class="rule"><h3>Use Review Focus</h3><p>List the five inputs or failures your spec implies but no test covers, and attach a test for each to the task that owns that code.</p></div>
+      <div class="rule"><h3>Batch small repeated edits</h3><p>If several tasks are the same small change across files, send them to one subagent and review the diff as a single unit.</p></div>
+      <div class="rule"><h3>Read the plan yourself</h3><p>Check it the way you'd check a brief for a new contractor. This is your last cheap chance to change direction.</p><span class="tag mine">My advice</span></div>
+    </div>
+  </section>
+
+  <section id="run">
+    <h2>While it runs</h2>
+    <p class="sub">The skill is built not to pause between tasks. Conflicts and gaps get a recorded ruling so work keeps moving. It stops and asks you for only four things:</p>
+    <ul class="stops">
+      <li>An irreversible or destructive operation</li>
+      <li>A security-sensitive action</li>
+      <li>A side effect outside the worktree that normally needs asking, such as a merge, a push to a shared branch, or a publish</li>
+      <li>A plan so broken that every way forward is a guess</li>
+    </ul>
+    <div class="stack">
+      <h3>Match the model to the job</h3>
+      <p class="sub">Name a model on every dispatch, because an omitted one inherits your session's, often the most expensive. The cheapest models can take two to three times the turns on multi-step work, so they don't always cost less.</p>
+    </div>
+    <div>
+      <table>
+        <thead><tr><th>Role</th><th>Tier</th></tr></thead>
+        <tbody>
+          <tr><td>Implementer, plan contains the complete code, or a single-file mechanical fix</td><td class="dim">Cheapest</td></tr>
+          <tr><td>Implementer working from prose, multi-file work, or debugging</td><td class="dim">Mid-tier</td></tr>
+          <tr><td>Implementer needing design judgment or broad codebase knowledge</td><td class="dim">Most capable</td></tr>
+          <tr><td>Task reviewer</td><td class="dim">Mid-tier at least, higher for risky diffs</td></tr>
+          <tr><td>Scoped re-review of a small fix</td><td class="dim">Cheap to mid-tier</td></tr>
+          <tr><td>Fix rounds 4 and 5</td><td class="dim">At least one tier above the stuck implementer</td></tr>
+          <tr><td>Final whole-branch review</td><td class="dim">Most capable</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="rules">
+      <div class="rule"><h3>Trust the ledger after an interruption</h3><p>Conversation memory doesn't survive compaction, but the ledger and <code>git log</code> do. Tasks marked complete aren't run again.</p></div>
+      <div class="rule"><h3>Know how the fix loop ends</h3><p>A task gets five fix rounds. The first three resume the same implementer, and the last two use a fresh one on a stronger model. After that, the controller rules on what's left.</p></div>
+      <div class="rule"><h3>Read "Rulings I made" before merging</h3><p>It's the only place the decisions made for you reach you, each with what it costs if wrong. Rework anything you disagree with.</p></div>
+      <div class="rule"><h3>Save money on long plans in Claude Code</h3><p>The controller is the most expensive seat. If you ask, it can hand the whole plan to one mid-tier orchestrator subagent. Use this for whole plans only.</p></div>
+    </div>
+  </section>
+
+  <section id="choose">
+    <h2>Which skill to use</h2>
+    <div>
+      <table>
+        <thead><tr><th>Your situation</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td>A plan with mostly independent tasks, and mistakes would be costly</td><td class="dim"><code>subagent-driven-development</code></td></tr>
+          <tr><td>A plan, but you want the cheapest, fastest run or have no subagent tool</td><td class="dim"><code>executing-plans</code>, with one review at the end</td></tr>
+          <tr><td>A plan whose tasks are tightly coupled</td><td class="dim">Neither. Run it by hand or rethink the design first</td></tr>
+          <tr><td>No plan yet</td><td class="dim"><code>brainstorming</code>, then <code>writing-plans</code></td></tr>
+          <tr><td>Several unrelated failures to investigate</td><td class="dim"><code>dispatching-parallel-agents</code></td></tr>
+          <tr><td>A small, clear change</td><td class="dim">Just ask. Brainstorming does it directly and tells you what it did</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Parallel work has a specific place here. <code>dispatching-parallel-agents</code> is for separate problems with no shared state. Implementers in the subagent loop always run one at a time, because parallel ones conflict.</p>
+  </section>
+
+  <section id="mistakes">
+    <h2>Mistakes that cost the most</h2>
+    <div>
+      <table>
+        <thead><tr><th>Mistake</th><th>What goes wrong</th><th>Do this instead</th></tr></thead>
+        <tbody>
+          <tr><td>Skipping the ledger</td><td class="dim">Controllers that lost their place re-ran whole finished task sequences, the most expensive failure the skill reports.</td><td class="dim">Keep the ledger, and trust it over memory.</td></tr>
+          <tr><td>One fixer per final-review finding</td><td class="dim">Each rebuilds context and reruns tests. One real fix wave cost more than all its tasks together.</td><td class="dim">Send one fixer the complete list.</td></tr>
+          <tr><td>Pasting history into dispatches</td><td class="dim">One real dispatch reached 42k characters, 99% of it old history.</td><td class="dim">Pass the brief as a file, plus only the interfaces it needs.</td></tr>
+          <tr><td>Running implementers in parallel</td><td class="dim">Their changes conflict.</td><td class="dim">Run one at a time.</td></tr>
+          <tr><td>The controller fixing code itself</td><td class="dim">It fills the controller's context, and the fix skips review.</td><td class="dim">Resume the implementer.</td></tr>
+          <tr><td>Using <code>HEAD~1</code> as the review base</td><td class="dim">The reviewer misses all but the last commit of a multi-commit task.</td><td class="dim">Record BASE before dispatching.</td></tr>
+          <tr><td>Letting subagents spawn reviewers</td><td class="dim">You pay for a duplicate review that counts for nothing.</td><td class="dim">Only the controller dispatches reviews.</td></tr>
+          <tr><td>Dropping a finding silently</td><td class="dim">The problem disappears from view but stays in the code.</td><td class="dim">Fix it, or park it with a recorded ruling at the round cap.</td></tr>
+          <tr><td>Running <code>git clean -fdx</code></td><td class="dim">It deletes the git-ignored workspace and ledger.</td><td class="dim">Avoid it mid-run. If it happens, recover from <code>git log</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="prompts">
+    <h2>Prompts to start with</h2>
+    <p class="sub">These are my own wording, and skills should trigger without them. They're useful when you want to be explicit.</p>
+    <div class="stack"><span class="label">Start a feature</span><div class="cmd"><pre>I want to add password reset to this app. Brainstorm the design with me first, then write the plan.</pre><button class="copy" type="button">Copy</button></div></div>
+    <div class="stack"><span class="label">Approve the plan</span><div class="cmd"><pre>The plan looks right. Use subagent-driven development, and set the model explicitly for every subagent.</pre><button class="copy" type="button">Copy</button></div></div>
+    <div class="stack"><span class="label">Resume after an interruption</span><div class="cmd"><pre>Continue this plan from its ledger. Don't re-run tasks marked complete.</pre><button class="copy" type="button">Copy</button></div></div>
+    <div class="stack"><span class="label">Cut controller cost in Claude Code</span><div class="cmd"><pre>Run this whole plan through one mid-tier orchestrator subagent, and pass me its "Rulings I made" list word for word.</pre><button class="copy" type="button">Copy</button></div></div>
+  </section>
+
+  <div class="foot">
+    <p class="back"><a href="index.html">See the animated overview of subagent-driven development</a></p>
+    <p>That overview shows the general pattern, including parallel work and separate reviewers. In Superpowers, implementers run one at a time, and one reviewer gives both verdicts.</p>
+    <ul>
+      <li><a href="https://github.com/obra/superpowers" target="_blank" rel="noopener">Superpowers on GitHub</a></li>
+      <li><a href="https://github.com/obra/superpowers/blob/main/skills/subagent-driven-development/SKILL.md" target="_blank" rel="noopener">subagent-driven-development</a></li>
+      <li><a href="https://github.com/obra/superpowers/blob/main/skills/writing-plans/SKILL.md" target="_blank" rel="noopener">writing-plans</a></li>
+      <li><a href="https://github.com/obra/superpowers/blob/main/skills/brainstorming/SKILL.md" target="_blank" rel="noopener">brainstorming</a></li>
+      <li><a href="https://github.com/obra/superpowers/blob/main/skills/finishing-a-development-branch/SKILL.md" target="_blank" rel="noopener">finishing-a-development-branch</a></li>
+    </ul>
+    <p>The loop's task, commits and ledger entries are made-up examples. Advice comes from the skill files unless it's marked as mine.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const DUR = 26;
+  const COLORS = { main: '#ff5fa8', impl: '#6fd3c7', review: '#f4b942' };
+
+  // Each actor flies between keyframes, given as [time, place]. ":r" means the right edge of a place.
+  const ACTORS = [
+    { color: COLORS.main, label: '', from: 0, to: DUR + 1, keys: [
+      [0, 'home'], [0.6, 'brief'], [2.4, 'brief:r'], [3, 'home'], [9.4, 'home'], [10, 'package'], [11, 'package:r'],
+      [11.6, 'home'], [23, 'home'], [23.6, 'ledger'], [25, 'ledger:r'], [25.6, 'home']
+    ] },
+    { color: COLORS.impl, label: 'implementer', from: 3, to: 23.3, keys: [
+      [3, 'home'], [3.7, 'brief'], [4.2, 'code'], [8, 'code:r'], [8.5, 'report'], [9.5, 'report:r'], [16, 'report:r'],
+      [16.6, 'code'], [19.4, 'code:r'], [20, 'report'], [20.4, 'report:r'], [23.3, 'report:r']
+    ] },
+    { color: COLORS.review, label: 'reviewer', from: 11.2, to: 15.8, keys: [
+      [11.2, 'home'], [11.8, 'brief'], [12.2, 'report'], [12.6, 'package'], [13, 'verdict'], [15, 'verdict:r'], [15.8, 'home']
+    ] },
+    { color: COLORS.review, label: 're-reviewer', from: 20.4, to: 23.1, keys: [
+      [20.4, 'home'], [21, 'verdict'], [22.6, 'verdict:r'], [23.1, 'home']
+    ] }
+  ];
+
+  const WRITES = [
+    { s: 'brief', t0: 0.6, t1: 2.4, c: COLORS.main, text: 'task-3-brief.md, BASE recorded' },
+    { s: 'code', t0: 4.2, t1: 8, c: COLORS.impl, text: '2 commits, tests pass' },
+    { s: 'report', t0: 8.5, t1: 9.5, c: COLORS.impl, text: 'DONE, details in task-3-report.md' },
+    { s: 'package', t0: 10, t1: 11, c: COLORS.main, text: 'Diff from BASE to HEAD in one file' },
+    { s: 'verdict', t0: 13, t1: 15, c: COLORS.review, state: 'fail', text: 'Spec: fail, token expiry missing. Quality: approved' },
+    { s: 'code', t0: 16.6, t1: 19.4, c: COLORS.impl, text: '3 commits, covering tests pass' },
+    { s: 'report', t0: 20, t1: 20.4, c: COLORS.impl, text: 'Fix report appended' },
+    { s: 'verdict', t0: 21, t1: 22.6, c: COLORS.review, state: 'pass', text: 'Finding addressed, nothing new' }
+  ];
+
+  const LEDGER = [
+    { l: 'fix', t0: 22.6, t1: 23, text: 'Task 3: fix round 1/5 (1 addressed, 0 open; commits a41d7e2..e4f5a6b)' },
+    { l: 'done', t0: 23.6, t1: 25, text: 'Task 3: complete (commits c09e5a7..e4f5a6b, review clean)' }
+  ];
+
+  const CAPTIONS = [
+    [0, 'The controller records the starting commit and copies just this task into a brief file.'],
+    [3, 'A brand-new implementer reads only the brief. It writes a failing test, then the code, then commits.'],
+    [8.5, 'The full report goes into a file. Only the status, commits and a one-line test summary come back to the controller.'],
+    [9.6, 'The controller packages the exact diff, so nothing large enters its own context.'],
+    [11.2, 'A fresh reviewer reads the brief, the report and the diff. It treats the report as unverified, and it must give two verdicts: spec and quality.'],
+    [15.8, 'Fix round 1. The controller sends the findings word for word to the same implementer, which fixes them and reruns the covering tests.'],
+    [20.4, 'A new reviewer checks only those findings and the fix diff, so the review can’t wander into new areas.'],
+    [23, 'The ledger gets a line for the round and a line for the task. Those lines survive compaction.'],
+    [DUR, 'The task is complete, and the ledger records it. The next implementer starts only now, so two never run at once.']
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const panel = $('loop'), stage = $('stage'), home = $('home'), captionEl = $('caption');
+  const playBtn = $('play'), seekEl = $('seek'), timeEl = $('time');
+  const stations = {};
+  panel.querySelectorAll('.station').forEach((el) => { stations[el.dataset.s] = el; });
+  const ledgerRows = {};
+  panel.querySelectorAll('#ledger .row').forEach((el) => { ledgerRows[el.dataset.l] = el; });
+
+  const ease = (p) => p * p * (3 - 2 * p);
+  const clamp01 = (p) => Math.max(0, Math.min(1, p));
+  const fmt = (s) => `0:${String(Math.floor(s)).padStart(2, '0')}`;
+
+  function place(name) {
+    const base = panel.getBoundingClientRect();
+    const [key, edge] = name.split(':');
+    const el = key === 'home' ? home : key === 'ledger' ? $('ledger') : stations[key];
+    const r = el.getBoundingClientRect();
+    return {
+      x: r.left - base.left + (edge === 'r' ? r.width : key === 'home' ? 0 : 6),
+      y: r.top - base.top + (key === 'home' ? 0 : Math.min(r.height * 0.6, 60))
+    };
+  }
+
+  function makeAgent(actor) {
+    const el = document.createElement('div');
+    el.className = 'agent';
+    el.style.setProperty('--c', actor.color);
+    const size = actor.label ? 18 : 24;
+    el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 18 18"><path d="M2 1l13 6.2-5.6 1.7L7.2 15z" fill="${actor.color}" stroke="#0d0f15" stroke-width="1"/></svg>${actor.label ? `<b>${actor.label}</b>` : ''}`;
+    stage.append(el);
+    actor.el = el;
+  }
+
+  function makeBox(item) {
+    const box = document.createElement('div');
+    box.className = 'box';
+    box.style.setProperty('--c', item.c || COLORS.main);
+    box.hidden = true;
+    stage.append(box);
+    item.box = box;
+  }
+
+  function actorPos(actor) {
+    const keys = actor.keys;
+    if (T <= keys[0][0]) return place(keys[0][1]);
+    for (let i = 0; i < keys.length - 1; i++) {
+      const [t0, a] = keys[i], [t1, b] = keys[i + 1];
+      if (T >= t0 && T < t1) {
+        const f = ease((T - t0) / (t1 - t0));
+        const pa = place(a), pb = place(b);
+        return { x: pa.x + (pb.x - pa.x) * f, y: pa.y + (pb.y - pa.y) * f };
+      }
+    }
+    return place(keys[keys.length - 1][1]);
+  }
+
+  function drawBox(item, el, p) {
+    const fade = T > item.t1 ? 1 - (T - item.t1) / 0.3 : 1;
+    if (T < item.t0 || fade <= 0) { item.box.hidden = true; return; }
+    const base = panel.getBoundingClientRect(), r = el.getBoundingClientRect();
+    item.box.hidden = false;
+    item.box.style.cssText += `left:${r.left - base.left}px;top:${r.top - base.top}px;width:${r.width * p}px;height:${r.height}px;opacity:${fade}`;
+  }
+
+  function setClip(el, p) {
+    const v = p >= 1 ? '' : `inset(0 ${((1 - p) * 100).toFixed(1)}% 0 0)`;
+    if (el.clipValue !== v) { el.clipValue = v; el.style.clipPath = v; }
+  }
+
+  function render() {
+    let caption = CAPTIONS[0][1];
+    for (const [t, text] of CAPTIONS) if (t <= T) caption = text;
+    if (captionEl.textContent !== caption) captionEl.textContent = caption;
+
+    Object.entries(stations).forEach(([key, el]) => {
+      let cur = null;
+      for (const w of WRITES) {
+        if (w.s === key && w.t0 <= T) cur = w;
+        if (w.s === key) drawBox(w, el, ease(clamp01((T - w.t0) / (w.t1 - w.t0))));
+      }
+      const span = el.querySelector('span');
+      if (el.cur !== cur) {
+        el.cur = cur;
+        span.textContent = cur ? cur.text : '';
+        el.classList.toggle('fail', !!cur && cur.state === 'fail');
+        el.classList.toggle('pass', !!cur && cur.state === 'pass');
+      }
+      setClip(span, cur ? ease(clamp01((T - cur.t0) / (cur.t1 - cur.t0))) : 1);
+    });
+
+    LEDGER.forEach((item) => {
+      const row = ledgerRows[item.l], on = T >= item.t0;
+      if (row.isOn !== on) {
+        row.isOn = on;
+        row.textContent = on ? item.text : '';
+        row.classList.toggle('new', on);
+      }
+      setClip(row, on ? clamp01((T - item.t0) / (item.t1 - item.t0)) : 1);
+    });
+
+    ACTORS.forEach((actor) => {
+      const on = T >= actor.from && T < actor.to;
+      actor.el.hidden = !on;
+      if (!on) return;
+      const p = actorPos(actor);
+      actor.el.style.transform = `translate3d(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px,0)`;
+      const flip = p.x > panel.clientWidth - 110;
+      if (flip !== actor.flipped) { actor.flipped = flip; actor.el.classList.toggle('flip', flip); }
+    });
+
+    seekEl.value = T;
+    timeEl.textContent = `${fmt(T)} / ${fmt(DUR)}`;
+    seekEl.setAttribute('aria-valuetext', `${Math.floor(T)} of ${DUR} seconds`);
+    playBtn.textContent = T >= DUR ? 'Replay' : playing ? 'Pause' : 'Play';
+  }
+
+  let T = DUR, playing = false, scrubbing = false, last = 0, dirty = true;
+
+  function frame(stamp) {
+    const dt = Math.min(0.1, (stamp - last) / 1000);
+    last = stamp;
+    if (playing && !scrubbing) {
+      T = Math.min(DUR, T + dt);
+      if (T >= DUR) playing = false;
+      dirty = true;
+    }
+    if (dirty) { dirty = false; render(); }
+    requestAnimationFrame(frame);
+  }
+
+  playBtn.addEventListener('click', () => {
+    if (T >= DUR) { T = 0; playing = true; } else { playing = !playing; }
+    dirty = true;
+  });
+  seekEl.addEventListener('pointerdown', () => { scrubbing = true; });
+  addEventListener('pointerup', () => { scrubbing = false; });
+  addEventListener('pointercancel', () => { scrubbing = false; });
+  seekEl.addEventListener('input', () => {
+    const v = +seekEl.value;
+    T = v >= DUR - 0.06 ? DUR : v;
+    dirty = true;
+  });
+  addEventListener('resize', () => { dirty = true; });
+
+  document.querySelectorAll('.copy').forEach((btn) => {
+    btn.setAttribute('aria-label', 'Copy this text');
+    btn.addEventListener('click', async () => {
+      const pre = btn.parentElement.querySelector('pre');
+      try {
+        await navigator.clipboard.writeText(pre.textContent);
+        btn.textContent = 'Copied';
+      } catch (err) {
+        const range = document.createRange();
+        range.selectNodeContents(pre);
+        const sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        btn.textContent = 'Selected';
+      }
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    });
+  });
+
+  ACTORS.forEach(makeAgent);
+  WRITES.forEach(makeBox);
+  render();
+  last = performance.now();
+  requestAnimationFrame(frame);
+
+  function start() { T = 0; playing = true; dirty = true; }
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // A page opened in a background tab waits, so the viewer still sees the loop from the start.
+    if (document.visibilityState === 'visible') start();
+    else document.addEventListener('visibilitychange', start, { once: true });
+  }
+})();
+</script>
+
+</body></html>
